@@ -238,21 +238,30 @@ function enterRepositionMode() {
   if (!selectedElement) return;
   isRepositionMode = true;
   const el = selectedElement;
-  const rect = el.getBoundingClientRect();
-  el.style.position = 'fixed';
-  el.style.left = `${rect.left}px`;
-  el.style.top = `${rect.top}px`;
-  el.style.width = `${rect.width}px`;
-  el.style.height = `${rect.height}px`;
+  const parent = el.offsetParent || el.parentElement || document.body;
+  const parentStyle = getComputedStyle(parent);
+  if (parentStyle.position === 'static') {
+    parent.style.setProperty('position', 'relative');
+    parent.dataset.restyldParentPosition = 'relative';
+  }
+  const parentRect = parent.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const startLeft = elRect.left - parentRect.left;
+  const startTop = elRect.top - parentRect.top;
+  el.style.position = 'absolute';
+  el.style.left = `${startLeft}px`;
+  el.style.top = `${startTop}px`;
+  el.style.width = `${elRect.width}px`;
+  el.style.height = `${elRect.height}px`;
   el.style.margin = '0';
   el.setAttribute('data-restyld-modified', '1');
   recordModification(el, {
     styles: {
-      position: 'fixed',
-      left: rect.left + 'px',
-      top: rect.top + 'px',
-      width: rect.width + 'px',
-      height: rect.height + 'px',
+      position: 'absolute',
+      left: startLeft + 'px',
+      top: startTop + 'px',
+      width: elRect.width + 'px',
+      height: elRect.height + 'px',
       margin: '0',
     },
   });
@@ -264,9 +273,8 @@ function enterRepositionMode() {
     e.stopPropagation();
     const startX = e.clientX;
     const startY = e.clientY;
-    const r = el.getBoundingClientRect();
-    const startLeft = r.left;
-    const startTop = r.top;
+    const startLeftDrag = parseFloat(el.style.left) || 0;
+    const startTopDrag = parseFloat(el.style.top) || 0;
 
     const onMouseMove = (e2) => {
       if (rafId != null) return;
@@ -274,8 +282,10 @@ function enterRepositionMode() {
         rafId = null;
         const dx = e2.clientX - startX;
         const dy = e2.clientY - startY;
-        el.style.left = `${startLeft + dx}px`;
-        el.style.top = `${startTop + dy}px`;
+        const newLeft = startLeftDrag + dx;
+        const newTop = startTopDrag + dy;
+        el.style.left = `${newLeft}px`;
+        el.style.top = `${newTop}px`;
         recordModification(el, { styles: { left: el.style.left, top: el.style.top } });
       });
     };
