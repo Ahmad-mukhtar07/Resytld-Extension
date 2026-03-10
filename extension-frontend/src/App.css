@@ -1,0 +1,62 @@
+#root {
+  width: 320px;
+  min-height: 140px;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+}
+
+.popup {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.popup h1 {
+  font-size: 1.25rem;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  color: #666;
+  font-size: 0.875rem;
+  margin: 0 0 16px;
+}
+
+.error {
+  color: #c00;
+  font-size: 0.8rem;
+  margin: 0 0 8px;
+}
+
+.design-mode-btn {
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 2px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  width: 100%;
+}
+
+.design-mode-btn:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.design-mode-btn.active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.design-mode-btn.active:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: #666;
+  margin: 12px 0 0;
+  text-align: left;
+}

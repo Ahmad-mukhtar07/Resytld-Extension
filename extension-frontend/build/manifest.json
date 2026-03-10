@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "ReStyld - Style any website",
+  "version": "1.0.0",
+  "description": "Restyle any website like a designer",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": ["activeTab", "scripting"]
+}

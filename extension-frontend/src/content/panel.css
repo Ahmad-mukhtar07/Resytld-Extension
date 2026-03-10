@@ -1,0 +1,100 @@
+/* ReStyld control panel - injected into page, high specificity */
+.restyld-panel {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.restyld-panel *,
+.restyld-panel *::before,
+.restyld-panel *::after {
+  box-sizing: border-box;
+}
+
+.restyld-panel-card {
+  background: #1e1e1e;
+  color: #e0e0e0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+}
+
+.restyld-panel-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.restyld-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.restyld-btn:hover {
+  filter: brightness(1.1);
+}
+
+.restyld-btn-color {
+  background: #3a5a78;
+  color: #fff;
+}
+
+.restyld-btn-size {
+  background: #4a6a4a;
+  color: #fff;
+}
+
+.restyld-btn-remove {
+  background: #8b3a3a;
+  color: #fff;
+}
+
+.restyld-btn-reposition {
+  background: #5a4a7a;
+  color: #fff;
+}
+
+.restyld-btn-reposition.active {
+  background: #6a5a8a;
+  outline: 2px solid #9f8fbf;
+}
+
+.restyld-panel-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #333;
+}
+
+.restyld-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #b0b0b0;
+  font-size: 11px;
+}
+
+.restyld-color-input {
+  width: 100%;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #2a2a2a;
+}
+
+.restyld-slider {
+  width: 100%;
+  margin-bottom: 8px;
+  accent-color: #5a8a9a;
+}
+
+.restyld-slider:last-of-type {
+  margin-bottom: 0;
+}
