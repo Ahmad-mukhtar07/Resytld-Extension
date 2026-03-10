@@ -1,6 +1,8 @@
 #root {
-  width: 320px;
-  min-height: 140px;
+  width: 340px;
+  min-height: 180px;
+  max-height: 480px;
+  overflow-y: auto;
   margin: 0;
   padding: 16px;
   text-align: center;
@@ -59,4 +61,121 @@
   color: #666;
   margin: 12px 0 0;
   text-align: left;
+}
+
+.host-label {
+  font-size: 0.75rem;
+  color: #555;
+  margin: 0 0 10px;
+  word-break: break-all;
+}
+
+.skin-list {
+  text-align: left;
+  margin: 0 0 12px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px;
+  background: #fafafa;
+}
+
+.no-skins {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 8px 0;
+}
+
+.skin-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  background: #fff;
+  border: 1px solid #eee;
+}
+
+.skin-item:last-child {
+  margin-bottom: 0;
+}
+
+.skin-name {
+  flex: 1;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skin-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.skin-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.skin-btn.load {
+  background: #2563eb;
+  color: #fff;
+}
+
+.skin-btn.load:hover {
+  background: #1d4ed8;
+}
+
+.skin-btn.delete {
+  background: #dc2626;
+  color: #fff;
+}
+
+.skin-btn.delete:hover {
+  background: #b91c1c;
+}
+
+.save-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.save-input {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.design-mode-btn.secondary {
+  background: #64748b;
+  border-color: #64748b;
+  margin-bottom: 8px;
+}
+
+.design-mode-btn.secondary:hover {
+  background: #475569;
+  border-color: #475569;
+}
+
+.design-mode-btn.reset {
+  background: transparent;
+  border-color: #94a3b8;
+  color: #475569;
+  margin-top: 8px;
+}
+
+.design-mode-btn.reset:hover {
+  background: #f1f5f9;
+  border-color: #64748b;
 }

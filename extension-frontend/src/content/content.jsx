@@ -6,6 +6,8 @@ import { createRoot } from 'react-dom/client';
 import { StrictMode } from 'react';
 import ControlPanel from '../components/ControlPanel.jsx';
 import panelCss from './panel.css?raw';
+import { getPath } from '../lib/pathUtils.js';
+import { applyModifications, resetModifications, clearAllMarkedStyles } from '../lib/applySkin.js';
 
 // Inject panel styles into the page (content script runs as classic script context)
 (function injectStyles() {
@@ -26,6 +28,35 @@ let reactRoot = null;
 let isRepositionMode = false;
 let dragState = null;
 let rafId = null;
+
+/** Map pathKey -> { path, styles, removed?, removedHtml? } for current page modifications */
+const modificationsMap = new Map();
+/** Modifications last applied (for reset when no list provided) */
+let lastAppliedModifications = [];
+
+function pathKey(path) {
+  return Array.isArray(path) ? path.join(',') : '';
+}
+
+function recordModification(el, updates) {
+  if (!el || !document.body.contains(el)) return;
+  const path = getPath(el);
+  if (path.length === 0) return;
+  const key = pathKey(path);
+  const existing = modificationsMap.get(key) || { path, styles: {} };
+  if (updates.removed !== undefined) {
+    existing.removed = updates.removed;
+    existing.removedHtml = updates.removedHtml;
+  }
+  if (updates.styles && typeof updates.styles === 'object') {
+    Object.assign(existing.styles, updates.styles);
+  }
+  modificationsMap.set(key, existing);
+}
+
+function getCurrentModifications() {
+  return Array.from(modificationsMap.values());
+}
 
 const container = () => document.querySelector(`.${ROOT_CLASS}`);
 
@@ -95,16 +126,25 @@ function renderPanel() {
         initialWidth={dimensions.width}
         initialHeight={dimensions.height}
         onColorChange={(color) => {
-          if (selectedElement) selectedElement.style.backgroundColor = color;
+          if (selectedElement) {
+            selectedElement.style.backgroundColor = color;
+            selectedElement.setAttribute('data-restyld-modified', '1');
+            recordModification(selectedElement, { styles: { backgroundColor: color } });
+          }
         }}
         onSizeChange={({ width, height }) => {
           if (selectedElement) {
             selectedElement.style.width = `${width}px`;
             selectedElement.style.height = `${height}px`;
+            selectedElement.setAttribute('data-restyld-modified', '1');
+            recordModification(selectedElement, { styles: { width: width + 'px', height: height + 'px' } });
           }
         }}
         onRemove={() => {
           if (selectedElement) {
+            const path = getPath(selectedElement);
+            const removedHtml = selectedElement.outerHTML;
+            recordModification(selectedElement, { removed: true, removedHtml });
             selectedElement.remove();
             selectedElement = null;
             hidePanel();
@@ -135,16 +175,24 @@ function updatePanelPosition() {
           initialWidth={dimensions.width}
           initialHeight={dimensions.height}
           onColorChange={(color) => {
-            if (selectedElement) selectedElement.style.backgroundColor = color;
+            if (selectedElement) {
+              selectedElement.style.backgroundColor = color;
+              selectedElement.setAttribute('data-restyld-modified', '1');
+              recordModification(selectedElement, { styles: { backgroundColor: color } });
+            }
           }}
           onSizeChange={({ width, height }) => {
             if (selectedElement) {
               selectedElement.style.width = `${width}px`;
               selectedElement.style.height = `${height}px`;
+              selectedElement.setAttribute('data-restyld-modified', '1');
+              recordModification(selectedElement, { styles: { width: width + 'px', height: height + 'px' } });
             }
           }}
           onRemove={() => {
             if (selectedElement) {
+              const removedHtml = selectedElement.outerHTML;
+              recordModification(selectedElement, { removed: true, removedHtml });
               selectedElement.remove();
               selectedElement = null;
               hidePanel();
@@ -197,6 +245,17 @@ function enterRepositionMode() {
   el.style.width = `${rect.width}px`;
   el.style.height = `${rect.height}px`;
   el.style.margin = '0';
+  el.setAttribute('data-restyld-modified', '1');
+  recordModification(el, {
+    styles: {
+      position: 'fixed',
+      left: rect.left + 'px',
+      top: rect.top + 'px',
+      width: rect.width + 'px',
+      height: rect.height + 'px',
+      margin: '0',
+    },
+  });
   renderPanel();
 
   const onMouseDown = (e) => {
@@ -217,6 +276,7 @@ function enterRepositionMode() {
         const dy = e2.clientY - startY;
         el.style.left = `${startLeft + dx}px`;
         el.style.top = `${startTop + dy}px`;
+        recordModification(el, { styles: { left: el.style.left, top: el.style.top } });
       });
     };
 
@@ -303,6 +363,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true, designMode: false });
   } else if (msg.type === 'GET_DESIGN_MODE') {
     sendResponse({ designMode });
+  } else if (msg.type === 'GET_MODIFICATIONS') {
+    sendResponse({ ok: true, modifications: getCurrentModifications() });
+  } else if (msg.type === 'APPLY_SKIN') {
+    const modifications = msg.modifications || [];
+    const result = applyModifications(modifications);
+    lastAppliedModifications = modifications;
+    modificationsMap.clear();
+    modifications.forEach((mod) => {
+      if (mod && Array.isArray(mod.path)) modificationsMap.set(pathKey(mod.path), { ...mod });
+    });
+    sendResponse({ ok: true, ...result });
+  } else if (msg.type === 'RESET') {
+    const list = msg.modifications != null ? msg.modifications : lastAppliedModifications;
+    let result;
+    if (Array.isArray(list) && list.length > 0) {
+      result = resetModifications(list);
+      lastAppliedModifications = [];
+      modificationsMap.clear();
+    } else {
+      result = { cleared: clearAllMarkedStyles(), restored: 0, missing: 0 };
+      modificationsMap.clear();
+    }
+    sendResponse({ ok: true, ...result });
   }
   return true;
 });
