@@ -76,6 +76,7 @@ function clearSelectionBorder() {
   if (selectedElement && selectedElement.style) {
     selectedElement.style.outline = '';
     selectedElement.style.outlineOffset = '';
+    selectedElement.classList.remove('restyld-selected');
     selectedElement = null;
   }
 }
@@ -94,6 +95,7 @@ function setSelectionBorder(el) {
   if (!el) return;
   el.style.outline = SELECT_BORDER;
   el.style.outlineOffset = '2px';
+  el.classList.add('restyld-selected');
 }
 
 function getElementDimensions(el) {
@@ -158,6 +160,10 @@ function renderPanel() {
           exitRepositionMode();
           updatePanelPosition();
         }}
+        onDeselect={() => {
+          exitRepositionMode();
+          hidePanel();
+        }}
         isRepositionMode={isRepositionMode}
       />
     </StrictMode>
@@ -203,6 +209,10 @@ function updatePanelPosition() {
           onRepositionDone={() => {
             exitRepositionMode();
             updatePanelPosition();
+          }}
+          onDeselect={() => {
+            exitRepositionMode();
+            hidePanel();
           }}
           isRepositionMode={isRepositionMode}
         />
@@ -320,12 +330,14 @@ function exitRepositionMode() {
 function handleMouseOver(e) {
   if (!designMode) return;
   if (isOurUI(e.target)) return;
+  if (selectedElement) return;
   setHoverBorder(e.target);
 }
 
 function handleMouseOut(e) {
   if (!designMode) return;
   if (isOurUI(e.target)) return;
+  if (selectedElement) return;
   if (hoveredElement && !hoveredElement.contains(e.relatedTarget)) {
     clearHoverBorder();
   }
@@ -334,8 +346,14 @@ function handleMouseOut(e) {
 function handleClick(e) {
   if (!designMode) return;
   if (isOurUI(e.target)) return;
+  if (selectedElement && selectedElement !== e.target && !selectedElement.contains(e.target)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   e.preventDefault();
   e.stopPropagation();
+  clearHoverBorder();
   setSelectionBorder(e.target);
   showPanel();
 }

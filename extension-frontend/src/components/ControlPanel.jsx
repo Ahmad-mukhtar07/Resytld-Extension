@@ -16,6 +16,7 @@ export default function ControlPanel({
   onRemove,
   onReposition,
   onRepositionDone,
+  onDeselect,
   isRepositionMode,
 }) {
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -87,6 +88,16 @@ export default function ControlPanel({
     >
       <div className="restyld-panel-card">
         <div className="restyld-panel-buttons">
+          {onDeselect && (
+            <button
+              type="button"
+              className="restyld-btn restyld-btn-deselect"
+              onClick={onDeselect}
+              title="Close and select another element"
+            >
+              Deselect
+            </button>
+          )}
           <button
             type="button"
             className="restyld-btn restyld-btn-color"

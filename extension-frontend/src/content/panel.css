@@ -5,6 +5,12 @@
   box-sizing: border-box;
 }
 
+/* Selected element in design mode - !important overrides page styles */
+.restyld-selected {
+  outline: 3px solid #2563eb !important;
+  outline-offset: 2px !important;
+}
+
 .restyld-panel *,
 .restyld-panel *::before,
 .restyld-panel *::after {
@@ -64,6 +70,15 @@
 .restyld-btn-reposition.active {
   background: #6a5a8a;
   outline: 2px solid #9f8fbf;
+}
+
+.restyld-btn-deselect {
+  background: #4a4a5a;
+  color: #e0e0e0;
+}
+
+.restyld-btn-deselect:hover {
+  background: #5a5a6a;
 }
 
 .restyld-panel-section {
