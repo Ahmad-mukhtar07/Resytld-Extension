@@ -6,7 +6,13 @@ import { getElementByPath } from './pathUtils.js';
 
 const ROOT = document.body;
 
-const STYLE_KEYS = ['position', 'left', 'top', 'width', 'height', 'backgroundColor', 'margin'];
+const STYLE_KEYS = [
+  'position', 'left', 'top', 'width', 'height', 'backgroundColor', 'margin',
+  'opacity', 'borderRadius', 'transform',
+  'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign',
+  'padding', 'borderStyle', 'borderWidth', 'borderColor',
+  'boxShadow', 'backdropFilter',
+];
 
 /**
  * Apply one modification: set styles or remove element.

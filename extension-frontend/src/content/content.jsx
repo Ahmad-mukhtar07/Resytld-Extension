@@ -4,15 +4,16 @@
  */
 import { createRoot } from 'react-dom/client';
 import { StrictMode } from 'react';
-import ControlPanel from '../components/ControlPanel.jsx';
+import Sidebar from '../components/Sidebar.jsx';
 import panelCss from './panel.css?raw';
+import sidebarCss from '../components/Sidebar.css?raw';
 import { getPath } from '../lib/pathUtils.js';
 import { applyModifications, resetModifications, clearAllMarkedStyles } from '../lib/applySkin.js';
 
 // Inject panel styles into the page (content script runs as classic script context)
 (function injectStyles() {
   const style = document.createElement('style');
-  style.textContent = panelCss;
+  style.textContent = panelCss + '\n' + sidebarCss;
   (document.head || document.documentElement).appendChild(style);
 })();
 
@@ -106,68 +107,75 @@ function getElementDimensions(el) {
   return { width: Math.round(w), height: Math.round(h) };
 }
 
-function getPanelPosition(el) {
-  const rect = el.getBoundingClientRect();
-  const PANEL_OFFSET = 8;
-  const ESTIMATED_PANEL_HEIGHT = 320;
-  const ESTIMATED_PANEL_WIDTH = 220;
-  const viewportH = window.innerHeight;
-  const viewportW = window.innerWidth;
-  const belowTop = rect.bottom + PANEL_OFFSET;
-  const useAbove = belowTop + ESTIMATED_PANEL_HEIGHT > viewportH;
-  let panelTop = belowTop;
-  let panelBottom;
-  let placement = 'below';
-  if (useAbove) {
-    placement = 'above';
-    panelBottom = viewportH - rect.top + PANEL_OFFSET;
-  } else {
-    panelTop = Math.max(0, panelTop);
-  }
-  let panelLeft = rect.left;
-  if (panelLeft + ESTIMATED_PANEL_WIDTH > viewportW) panelLeft = viewportW - ESTIMATED_PANEL_WIDTH;
-  if (panelLeft < 0) panelLeft = 0;
+function getElementInfo(el) {
+  if (!el) return {};
   return {
-    x: rect.left,
-    y: rect.top,
-    width: rect.width,
-    height: rect.height,
-    panelTop,
-    panelBottom,
-    panelLeft,
-    placement,
+    tagName: el.tagName || '',
+    id: el.id || '',
+    className: (el.className && typeof el.className === 'string' ? el.className : '') || '',
+  };
+}
+
+function getInitialStyles(el) {
+  if (!el) return {};
+  const cs = getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  const num = (v) => (v != null && v !== '' ? String(v) : undefined);
+  return {
+    backgroundColor: num(el.style.backgroundColor) || cs.backgroundColor,
+    opacity: num(el.style.opacity) ?? cs.opacity,
+    width: num(el.style.width) || (rect.width ? `${rect.width}px` : undefined),
+    height: num(el.style.height) || (rect.height ? `${rect.height}px` : undefined),
+    borderRadius: num(el.style.borderRadius) || cs.borderRadius,
+    transform: num(el.style.transform) || cs.transform,
+    fontFamily: num(el.style.fontFamily) || cs.fontFamily,
+    fontSize: num(el.style.fontSize) || cs.fontSize,
+    fontWeight: num(el.style.fontWeight) || cs.fontWeight,
+    color: num(el.style.color) || cs.color,
+    textAlign: num(el.style.textAlign) || cs.textAlign,
+    padding: num(el.style.padding) || cs.padding,
+    margin: num(el.style.margin) || cs.margin,
+    borderStyle: num(el.style.borderStyle) || cs.borderStyle,
+    borderWidth: num(el.style.borderWidth) || cs.borderWidth,
+    borderColor: num(el.style.borderColor) || cs.borderColor,
+    boxShadow: num(el.style.boxShadow) || cs.boxShadow,
+    backdropFilter: num(el.style.backdropFilter) || cs.backdropFilter,
+    position: num(el.style.position) || undefined,
+    left: num(el.style.left) || undefined,
+    top: num(el.style.top) || undefined,
   };
 }
 
 function renderPanel() {
   if (!panelRoot || !selectedElement || !reactRoot) return;
-  const dimensions = getElementDimensions(selectedElement);
-  const position = getPanelPosition(selectedElement);
+  const elementInfo = getElementInfo(selectedElement);
+  const initialStyles = getInitialStyles(selectedElement);
+
+  const applyStyles = (stylesObj) => {
+    if (!selectedElement) return;
+    selectedElement.setAttribute('data-restyld-modified', '1');
+    const updates = {};
+    for (const [key, value] of Object.entries(stylesObj)) {
+      if (value !== undefined && value !== null && value !== '') {
+        selectedElement.style[key] = value;
+        updates[key] = value;
+      }
+    }
+    if (Object.keys(updates).length) recordModification(selectedElement, { styles: updates });
+  };
 
   reactRoot.render(
     <StrictMode>
-      <ControlPanel
-        position={position}
-        initialWidth={dimensions.width}
-        initialHeight={dimensions.height}
-        onColorChange={(color) => {
-          if (selectedElement) {
-            selectedElement.style.backgroundColor = color;
-            selectedElement.setAttribute('data-restyld-modified', '1');
-            recordModification(selectedElement, { styles: { backgroundColor: color } });
-          }
-        }}
-        onSizeChange={({ width, height }) => {
-          if (selectedElement) {
-            selectedElement.style.width = `${width}px`;
-            selectedElement.style.height = `${height}px`;
-            selectedElement.setAttribute('data-restyld-modified', '1');
-            recordModification(selectedElement, { styles: { width: width + 'px', height: height + 'px' } });
-          }
+      <Sidebar
+        elementInfo={elementInfo}
+        initialStyles={initialStyles}
+        onStyleChange={applyStyles}
+        onDeselect={() => {
+          exitRepositionMode();
+          hidePanel();
         }}
         onRemove={() => {
           if (selectedElement) {
-            const path = getPath(selectedElement);
             const removedHtml = selectedElement.outerHTML;
             recordModification(selectedElement, { removed: true, removedHtml });
             selectedElement.remove();
@@ -176,16 +184,10 @@ function renderPanel() {
             exitRepositionMode();
           }
         }}
-        onReposition={() => {
-          enterRepositionMode();
-        }}
+        onReposition={() => enterRepositionMode()}
         onRepositionDone={() => {
           exitRepositionMode();
-          updatePanelPosition();
-        }}
-        onDeselect={() => {
-          exitRepositionMode();
-          hidePanel();
+          renderPanel();
         }}
         isRepositionMode={isRepositionMode}
       />
@@ -195,52 +197,7 @@ function renderPanel() {
 
 function updatePanelPosition() {
   if (selectedElement && reactRoot) {
-    const dimensions = getElementDimensions(selectedElement);
-    const position = getPanelPosition(selectedElement);
-    reactRoot.render(
-      <StrictMode>
-        <ControlPanel
-          position={position}
-          initialWidth={dimensions.width}
-          initialHeight={dimensions.height}
-          onColorChange={(color) => {
-            if (selectedElement) {
-              selectedElement.style.backgroundColor = color;
-              selectedElement.setAttribute('data-restyld-modified', '1');
-              recordModification(selectedElement, { styles: { backgroundColor: color } });
-            }
-          }}
-          onSizeChange={({ width, height }) => {
-            if (selectedElement) {
-              selectedElement.style.width = `${width}px`;
-              selectedElement.style.height = `${height}px`;
-              selectedElement.setAttribute('data-restyld-modified', '1');
-              recordModification(selectedElement, { styles: { width: width + 'px', height: height + 'px' } });
-            }
-          }}
-          onRemove={() => {
-            if (selectedElement) {
-              const removedHtml = selectedElement.outerHTML;
-              recordModification(selectedElement, { removed: true, removedHtml });
-              selectedElement.remove();
-              selectedElement = null;
-              hidePanel();
-              exitRepositionMode();
-            }
-          }}
-          onReposition={() => enterRepositionMode()}
-          onRepositionDone={() => {
-            exitRepositionMode();
-            updatePanelPosition();
-          }}
-          onDeselect={() => {
-            exitRepositionMode();
-            hidePanel();
-          }}
-          isRepositionMode={isRepositionMode}
-        />
-      </StrictMode>
-    );
+    renderPanel();
   }
 }
 
