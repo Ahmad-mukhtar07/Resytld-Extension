@@ -44,8 +44,8 @@ export default function Sidebar({
   const [minimized, setMinimized] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [openSections, setOpenSections] = useState({
-    appearance: true,
-    dimensions: true,
+    appearance: false,
+    dimensions: false,
     typography: false,
     spacing: false,
     borders: false,
@@ -398,6 +398,20 @@ export default function Sidebar({
                   value={(s.borderColor || '#000000').replace(/ /g, '')}
                   onChange={(e) => updateStyle('borderColor', e.target.value)}
                 />
+              </div>
+              <div className="restyld-sb-controlRow">
+                <span className="restyld-sb-label">Border radius</span>
+                <div className="restyld-sb-sliderRow">
+                  <input
+                    type="range"
+                    className="restyld-sb-slider"
+                    min={0}
+                    max={48}
+                    value={parseNum(s.borderRadius) ?? 0}
+                    onChange={(e) => updateStyle('borderRadius', `${e.target.value}px`)}
+                  />
+                  <span className="restyld-sb-sliderValue">{parseNum(s.borderRadius) ?? 0}px</span>
+                </div>
               </div>
             </div>
           </div>

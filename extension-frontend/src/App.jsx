@@ -21,6 +21,8 @@ function App() {
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [selectedElement, setSelectedElement] = useState(null)
   const [isRepositionMode, setIsRepositionMode] = useState(false)
+  const [openSkinsSection, setOpenSkinsSection] = useState(true)
+  const [openEditorSection, setOpenEditorSection] = useState(true)
 
   const loadSkins = useCallback(async (url) => {
     const h = getHostFromUrl(url)
@@ -67,8 +69,12 @@ function App() {
     const listener = (msg) => {
       if (msg?.type === 'SELECTED_ELEMENT') {
         setSelectedElement(msg.selected ?? null)
-        if (msg.selected) setIsRepositionMode(msg.isRepositionMode ?? false)
-        else setIsRepositionMode(false)
+        if (msg.selected) {
+          setIsRepositionMode(msg.isRepositionMode ?? false)
+          setOpenEditorSection(true)
+        } else {
+          setIsRepositionMode(false)
+        }
       }
     }
     chrome.runtime.onMessage.addListener(listener)
@@ -275,108 +281,136 @@ function App() {
           </div>
         )}
 
-        {designMode && selectedElement && (
-          <section className="section editor-section">
-            <Sidebar
-              embedded
-              elementInfo={selectedElement.elementInfo}
-              initialStyles={selectedElement.initialStyles}
-              onStyleChange={handleApplyStyle}
-              onDeselect={handleDeselect}
-              onRemove={handleRemove}
-              onReposition={handleRepositionStart}
-              onRepositionDone={handleRepositionDone}
-              isRepositionMode={isRepositionMode}
-            />
-          </section>
-        )}
-
-        {host && (
-          <section className="section">
-            <h2 className="section-title">Saved skins</h2>
-            {skinList.length === 0 ? (
-              <p className="empty-state">No saved skins yet. Enter design mode and save your first.</p>
-            ) : (
-              <ul className="skin-list">
-                {skinList.map(([id, skin]) => (
-                  <li key={id} className={`skin-item ${activeSkinId === id ? 'skin-item-active' : ''}`}>
-                    <span className="skin-name" title={skin.name}>
-                      {skin.name}
-                    </span>
-                    <div className="skin-actions">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        onClick={() => handleLoadSkin(id)}
-                        title="Load and apply"
-                      >
-                        Load
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost-danger"
-                        onClick={() => handleDeleteSkin(id)}
-                        title="Delete skin"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-
-        {showSaveInput ? (
-          <div className="save-inline">
-            <input
-              type="text"
-              className="save-input"
-              placeholder="Skin name"
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSaveSkin()}
-              autoFocus
-            />
-            <div className="save-inline-actions">
-              <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveSkin}>
-                Save
-              </button>
-              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowSaveInput(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
+        {/* Top: Skins & actions (collapsible) */}
+        <div className={`collapsible ${openSkinsSection ? 'is-open' : ''}`}>
           <button
             type="button"
-            className="btn btn-secondary full"
-            onClick={() => setShowSaveInput(true)}
-            title="Save current design changes as a new skin"
+            className="collapsible-header"
+            onClick={() => setOpenSkinsSection((o) => !o)}
+            aria-expanded={openSkinsSection}
           >
-            Save as new skin
+            <span className="collapsible-title">Skins & actions</span>
+            <span className="collapsible-icon" aria-hidden>{openSkinsSection ? '▼' : '▶'}</span>
           </button>
-        )}
+          <div className="collapsible-body">
+            {host && (
+              <section className="section">
+                <h2 className="section-title">Saved skins</h2>
+                {skinList.length === 0 ? (
+                  <p className="empty-state">No saved skins yet. Enter design mode and save your first.</p>
+                ) : (
+                  <ul className="skin-list">
+                    {skinList.map(([id, skin]) => (
+                      <li key={id} className={`skin-item ${activeSkinId === id ? 'skin-item-active' : ''}`}>
+                        <span className="skin-name" title={skin.name}>
+                          {skin.name}
+                        </span>
+                        <div className="skin-actions">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-primary"
+                            onClick={() => handleLoadSkin(id)}
+                            title="Load and apply"
+                          >
+                            Load
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost-danger"
+                            onClick={() => handleDeleteSkin(id)}
+                            title="Delete skin"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
 
-        <button
-          type="button"
-          className={`btn full ${designMode ? 'btn-danger' : 'btn-primary'}`}
-          onClick={toggleDesignMode}
-        >
-          {designMode ? 'Exit design mode' : 'Enter design mode'}
-        </button>
+            {showSaveInput ? (
+              <div className="save-inline">
+                <input
+                  type="text"
+                  className="save-input"
+                  placeholder="Skin name"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveSkin()}
+                  autoFocus
+                />
+                <div className="save-inline-actions">
+                  <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveSkin}>
+                    Save
+                  </button>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowSaveInput(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary full"
+                onClick={() => setShowSaveInput(true)}
+                title="Save current design changes as a new skin"
+              >
+                Save as new skin
+              </button>
+            )}
 
-        {host && (
-          <button type="button" className="btn btn-ghost full" onClick={handleReset}>
-            Reset page to original
-          </button>
-        )}
+            <button
+              type="button"
+              className={`btn full ${designMode ? 'btn-danger' : 'btn-primary'}`}
+              onClick={toggleDesignMode}
+            >
+              {designMode ? 'Exit design mode' : 'Enter design mode'}
+            </button>
 
-        {designMode && (
-          <p className="hint">
-            Click any element on the page to select and edit it in the inspector.
-          </p>
+            {host && (
+              <button type="button" className="btn btn-ghost full" onClick={handleReset}>
+                Reset page to original
+              </button>
+            )}
+
+            {designMode && (
+              <p className="hint">
+                Click any element on the page to select and edit it in the inspector.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom: Edit element (collapsible, only when selection exists) */}
+        {designMode && selectedElement && (
+          <div className={`collapsible ${openEditorSection ? 'is-open' : ''}`}>
+            <button
+              type="button"
+              className="collapsible-header"
+              onClick={() => setOpenEditorSection((o) => !o)}
+              aria-expanded={openEditorSection}
+            >
+              <span className="collapsible-title">Edit element</span>
+              <span className="collapsible-icon" aria-hidden>{openEditorSection ? '▼' : '▶'}</span>
+            </button>
+            <div className="collapsible-body">
+              <section className="section editor-section">
+                <Sidebar
+                  embedded
+                  elementInfo={selectedElement.elementInfo}
+                  initialStyles={selectedElement.initialStyles}
+                  onStyleChange={handleApplyStyle}
+                  onDeselect={handleDeselect}
+                  onRemove={handleRemove}
+                  onReposition={handleRepositionStart}
+                  onRepositionDone={handleRepositionDone}
+                  isRepositionMode={isRepositionMode}
+                />
+              </section>
+            </div>
+          </div>
         )}
       </main>
     </div>
