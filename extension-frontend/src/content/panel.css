@@ -170,3 +170,116 @@
 .restyld-resize-handle[data-handle="sw"] {
   cursor: nesw-resize;
 }
+
+/* Alignment & spacing guides overlay */
+.restyld-guides-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2147483644;
+}
+
+.restyld-guide-line {
+  position: absolute;
+  background: #dc2626;
+  opacity: 0.9;
+  animation: restyld-guide-in 0.12s ease-out;
+}
+
+.restyld-guide-line--dotted {
+  background: transparent;
+  border: 0 none;
+  border-style: dashed;
+  border-color: #dc2626;
+  opacity: 0.85;
+}
+
+.restyld-guide-line--horizontal.restyld-guide-line--dotted {
+  border-top-width: 2px;
+  height: 0;
+}
+
+.restyld-guide-line--vertical.restyld-guide-line--dotted {
+  border-left-width: 2px;
+  width: 0;
+}
+
+.restyld-guide-line--horizontal:not(.restyld-guide-line--dotted) {
+  height: 2px;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.restyld-guide-line--vertical:not(.restyld-guide-line--dotted) {
+  width: 2px;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+/* Alignment & spacing guides overlay */
+.restyld-guides-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2147483644;
+}
+
+.restyld-guide-line {
+  position: absolute;
+  background: #dc2626;
+  opacity: 0.9;
+  animation: restyld-guide-in 0.12s ease-out;
+}
+
+.restyld-guide-line--dotted {
+  background: transparent;
+  border: 0 none;
+  border-style: dashed;
+  border-color: #dc2626;
+  opacity: 0.85;
+}
+
+.restyld-guide-line--horizontal.restyld-guide-line--dotted {
+  border-top-width: 2px;
+  height: 0;
+}
+
+.restyld-guide-line--vertical.restyld-guide-line--dotted {
+  border-left-width: 2px;
+  width: 0;
+}
+
+.restyld-guide-line--horizontal:not(.restyld-guide-line--dotted) {
+  height: 2px;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.restyld-guide-line--vertical:not(.restyld-guide-line--dotted) {
+  width: 2px;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.restyld-guide-label {
+  position: absolute;
+  font: 10px/1.2 system-ui, sans-serif;
+  color: #fff;
+  background: #dc2626;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  animation: restyld-guide-in 0.12s ease-out;
+  pointer-events: none;
+}
+
+@keyframes restyld-guide-in {
+  from { opacity: 0; }
+  to { opacity: 0.9; }
+}

@@ -5,6 +5,7 @@
 import panelCss from './panel.css?raw';
 import { getPath } from '../lib/pathUtils.js';
 import { applyModifications, resetModifications, clearAllMarkedStyles } from '../lib/applySkin.js';
+import { getCandidateRects, computeDragGuides, computeResizeGuides } from './alignmentGuides.js';
 
 // Inject panel styles (resize handles + selection outline only)
 (function injectStyles() {
@@ -23,6 +24,62 @@ let selectedElement = null;
 let rafId = null;
 
 const DRAG_THRESHOLD = 4;
+
+let guidesOverlay = null;
+
+function getGuidesOverlay() {
+  if (!guidesOverlay) {
+    guidesOverlay = document.createElement('div');
+    guidesOverlay.className = 'restyld-guides-overlay';
+    document.body.appendChild(guidesOverlay);
+  }
+  return guidesOverlay;
+}
+
+function clearGuides() {
+  if (guidesOverlay) guidesOverlay.innerHTML = '';
+}
+
+function renderGuides(guides) {
+  if (!guides || guides.length === 0) {
+    clearGuides();
+    return;
+  }
+  const overlay = getGuidesOverlay();
+  overlay.innerHTML = '';
+  for (const g of guides) {
+    const isH = g.orientation === 'h';
+    const line = document.createElement('div');
+    line.className = 'restyld-guide-line restyld-guide-line--' + (isH ? 'horizontal' : 'vertical');
+    if (g.style === 'dotted') line.classList.add('restyld-guide-line--dotted');
+    const ext = g.extent || { min: 0, max: 0 };
+    if (isH) {
+      line.style.top = g.position + 'px';
+      line.style.left = ext.min + 'px';
+      line.style.width = Math.max(0, ext.max - ext.min) + 'px';
+    } else {
+      line.style.left = g.position + 'px';
+      line.style.top = ext.min + 'px';
+      line.style.height = Math.max(0, ext.max - ext.min) + 'px';
+    }
+    overlay.appendChild(line);
+    if (g.label) {
+      const label = document.createElement('div');
+      label.className = 'restyld-guide-label';
+      label.textContent = g.label;
+      if (isH) {
+        label.style.left = ext.min + 'px';
+        label.style.top = g.position + 'px';
+        label.style.transform = 'translateY(-100%) translateY(-4px)';
+      } else {
+        label.style.left = g.position + 'px';
+        label.style.top = ext.min + 'px';
+        label.style.transform = 'translateX(-50%) translateY(-100%)';
+      }
+      overlay.appendChild(label);
+    }
+  }
+}
 
 let resizeHandlesRoot = null;
 let resizeRafId = null;
@@ -157,13 +214,16 @@ function ensureElementPositionedForResize(el) {
   }
   const parentRect = parent.getBoundingClientRect();
   const elRect = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
   const left = elRect.left - parentRect.left;
   const top = elRect.top - parentRect.top;
+  const width = (cs.width && cs.width !== 'auto') ? cs.width : `${elRect.width}px`;
+  const height = (cs.height && cs.height !== 'auto') ? cs.height : `${elRect.height}px`;
   el.style.position = 'absolute';
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
-  el.style.width = `${elRect.width}px`;
-  el.style.height = `${elRect.height}px`;
+  el.style.width = width;
+  el.style.height = height;
   el.style.margin = '0';
   el.setAttribute('data-restyld-modified', '1');
   recordModification(el, {
@@ -171,8 +231,8 @@ function ensureElementPositionedForResize(el) {
       position: 'absolute',
       left: left + 'px',
       top: top + 'px',
-      width: elRect.width + 'px',
-      height: elRect.height + 'px',
+      width,
+      height,
       margin: '0',
     },
   });
@@ -218,6 +278,7 @@ function startResizeDrag(handleName, startEvent) {
   let startTop = elRect.top - parentRect.top;
   let startWidth = elRect.width;
   let startHeight = elRect.height;
+  const candidateRects = getCandidateRects(document, el, document.body);
 
   const onMouseMove = (e) => {
     if (rafId != null) return;
@@ -302,6 +363,23 @@ function startResizeDrag(handleName, startEvent) {
         },
       });
       updateResizeHandlesPosition();
+      if (candidateRects && candidateRects.length > 0) {
+        const activeRect = el.getBoundingClientRect();
+        const r = {
+          left: activeRect.left,
+          top: activeRect.top,
+          right: activeRect.right,
+          bottom: activeRect.bottom,
+          width: activeRect.width,
+          height: activeRect.height,
+          centerX: activeRect.left + activeRect.width / 2,
+          centerY: activeRect.top + activeRect.height / 2,
+        };
+        const { guides } = computeResizeGuides(r, handleName, candidateRects);
+        renderGuides(guides);
+      } else {
+        clearGuides();
+      }
     });
   };
 
@@ -309,6 +387,7 @@ function startResizeDrag(handleName, startEvent) {
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseup', onMouseUp);
     if (rafId != null) cancelAnimationFrame(rafId);
+    clearGuides();
   };
 
   document.addEventListener('mousemove', onMouseMove, { passive: true });
@@ -381,6 +460,7 @@ function showPanel() {
 function hidePanel() {
   removeDragFromSelectedElement();
   removeResizeHandles();
+  clearGuides();
   clearSelectionBorder();
   selectedElement = null;
   notifySelection();
@@ -400,6 +480,7 @@ function attachDragToSelectedElement() {
     let dragStarted = false;
     let startLeft = 0;
     let startTop = 0;
+    let candidateRects = null;
 
     const onMouseMove = (e2) => {
       const dx = e2.clientX - startX;
@@ -415,12 +496,34 @@ function attachDragToSelectedElement() {
         startX = e2.clientX;
         startY = e2.clientY;
         dragStarted = true;
+        candidateRects = getCandidateRects(document, el, document.body);
       }
       if (rafId != null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const newLeft = startLeft + (e2.clientX - startX);
-        const newTop = startTop + (e2.clientY - startY);
+        let newLeft = startLeft + (e2.clientX - startX);
+        let newTop = startTop + (e2.clientY - startY);
+        const activeRect = el.getBoundingClientRect();
+        if (candidateRects && candidateRects.length > 0) {
+          const parent = el.offsetParent || el.parentElement || document.body;
+          const parentRect = parent.getBoundingClientRect();
+          const r = {
+            left: parentRect.left + newLeft,
+            top: parentRect.top + newTop,
+            right: parentRect.left + newLeft + activeRect.width,
+            bottom: parentRect.top + newTop + activeRect.height,
+            width: activeRect.width,
+            height: activeRect.height,
+            centerX: parentRect.left + newLeft + activeRect.width / 2,
+            centerY: parentRect.top + newTop + activeRect.height / 2,
+          };
+          const { guides, snap } = computeDragGuides(r, candidateRects);
+          renderGuides(guides);
+          if (snap.left != null) newLeft = snap.left - parentRect.left;
+          if (snap.top != null) newTop = snap.top - parentRect.top;
+        } else {
+          clearGuides();
+        }
         el.style.left = `${newLeft}px`;
         el.style.top = `${newTop}px`;
         recordModification(el, { styles: { left: el.style.left, top: el.style.top } });
@@ -436,6 +539,7 @@ function attachDragToSelectedElement() {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       if (rafId != null) cancelAnimationFrame(rafId);
+      clearGuides();
       if (dragStarted) notifySelection();
     };
 
