@@ -4,9 +4,16 @@
   "version": "1.0.0",
   "description": "Restyle any website like a designer",
   "action": {
-    "default_popup": "index.html"
+    "default_title": "Open ReStyld"
   },
-  "permissions": ["activeTab", "scripting", "storage"],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "permissions": ["activeTab", "scripting", "storage", "sidePanel"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

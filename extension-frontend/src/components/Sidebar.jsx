@@ -31,6 +31,7 @@ function parseNum(val) {
 }
 
 export default function Sidebar({
+  embedded = false,
   elementInfo = {},
   initialStyles = {},
   onStyleChange,
@@ -92,7 +93,7 @@ export default function Sidebar({
 
   const s = stylesState;
 
-  if (minimized) {
+  if (minimized && !embedded) {
     return (
       <div className="restyld-sb-minimizedTab">
         <button
@@ -111,27 +112,31 @@ export default function Sidebar({
     );
   }
 
-  return (
-    <div className="restyld-sb-sidebar" style={{ transform: `translateX(${dragOffset}px)` }}>
-      <div
-        className="restyld-sb-dragHandle"
-        onMouseDown={handleDragStart}
-        title="Drag to move sidebar"
-        role="presentation"
-      />
+  const content = (
+    <>
+      {!embedded && (
+        <div
+          className="restyld-sb-dragHandle"
+          onMouseDown={handleDragStart}
+          title="Drag to move sidebar"
+          role="presentation"
+        />
+      )}
       <div className="restyld-sb-content">
         <header className="restyld-sb-header">
           <div className="restyld-sb-headerRow">
             <h2 className="restyld-sb-title">Edit element</h2>
-            <button
-              type="button"
-              className="restyld-sb-minimizeBtn"
-              onClick={() => setMinimized(true)}
-              title="Minimize"
-              aria-label="Minimize"
-            >
-              ▶
-            </button>
+            {!embedded && (
+              <button
+                type="button"
+                className="restyld-sb-minimizeBtn"
+                onClick={() => setMinimized(true)}
+                title="Minimize"
+                aria-label="Minimize"
+              >
+                ▶
+              </button>
+            )}
           </div>
           <div className="restyld-sb-elementInfo">
             <span className="restyld-sb-tag">&lt;{tag}&gt;</span>
@@ -443,6 +448,16 @@ export default function Sidebar({
           </button>
         </div>
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="restyld-sb-embedded">{content}</div>;
+  }
+
+  return (
+    <div className="restyld-sb-sidebar" style={{ transform: `translateX(${dragOffset}px)` }}>
+      {content}
     </div>
   );
 }

@@ -1,4 +1,24 @@
-/* ReStyld Sidebar - fixed right dashboard */
+/* ReStyld Sidebar - fixed right dashboard (page) or embedded (extension panel) */
+.restyld-sb-embedded {
+  width: 100%;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 10px);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+
+.restyld-sb-embedded .restyld-sb-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.restyld-sb-embedded .restyld-sb-body {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 .restyld-sb-sidebar {
   position: fixed;
   top: 0;

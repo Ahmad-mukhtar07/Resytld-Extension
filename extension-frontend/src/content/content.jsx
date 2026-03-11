@@ -1,19 +1,15 @@
 /**
  * ReStyld content script — design mode and DOM manipulation.
- * Pure JavaScript for hover/select/drag; React only for the floating panel UI.
+ * Selection and resize handles on page; editing UI lives in extension side panel.
  */
-import { createRoot } from 'react-dom/client';
-import { StrictMode } from 'react';
-import Sidebar from '../components/Sidebar.jsx';
 import panelCss from './panel.css?raw';
-import sidebarCss from '../components/Sidebar.css?raw';
 import { getPath } from '../lib/pathUtils.js';
 import { applyModifications, resetModifications, clearAllMarkedStyles } from '../lib/applySkin.js';
 
-// Inject panel styles into the page (content script runs as classic script context)
+// Inject panel styles (resize handles + selection outline only)
 (function injectStyles() {
   const style = document.createElement('style');
-  style.textContent = panelCss + '\n' + sidebarCss;
+  style.textContent = panelCss;
   (document.head || document.documentElement).appendChild(style);
 })();
 
@@ -24,10 +20,7 @@ const SELECT_BORDER = '3px solid #2563eb';
 let designMode = false;
 let hoveredElement = null;
 let selectedElement = null;
-let panelRoot = null;
-let reactRoot = null;
 let isRepositionMode = false;
-let dragState = null;
 let rafId = null;
 
 let resizeHandlesRoot = null;
@@ -69,7 +62,7 @@ function getCurrentModifications() {
 const container = () => document.querySelector(`.${ROOT_CLASS}`);
 
 function isOurUI(target) {
-  return target.closest(`.${ROOT_CLASS}`) != null;
+  return target.closest(`.${ROOT_CLASS}`) != null || target.closest('.restyld-resize-handles') != null;
 }
 
 function clearHoverBorder() {
@@ -323,7 +316,7 @@ function startResizeDrag(handleName, startEvent) {
 
 function createResizeHandles() {
   removeResizeHandles();
-  if (!selectedElement || !panelRoot || !panelRoot.parentNode) return;
+  if (!selectedElement) return;
   const container = document.createElement('div');
   container.className = 'restyld-resize-handles';
   resizeHandlesRoot = container;
@@ -334,7 +327,7 @@ function createResizeHandles() {
     handle.addEventListener('mousedown', (e) => startResizeDrag(name, e));
     container.appendChild(handle);
   });
-  panelRoot.parentNode.appendChild(container);
+  document.body.appendChild(container);
   updateResizeHandlesPosition();
 
   const loop = () => {
@@ -357,84 +350,37 @@ function removeResizeHandles() {
   resizeHandlesRoot = null;
 }
 
+function notifySelection() {
+  try {
+    chrome.runtime.sendMessage({
+      type: 'SELECTED_ELEMENT',
+      selected: selectedElement
+        ? { elementInfo: getElementInfo(selectedElement), initialStyles: getInitialStyles(selectedElement) }
+        : null,
+      isRepositionMode: selectedElement ? isRepositionMode : false,
+    });
+  } catch (_) {}
+}
+
 function renderPanel() {
-  if (!panelRoot || !selectedElement || !reactRoot) return;
-  const elementInfo = getElementInfo(selectedElement);
-  const initialStyles = getInitialStyles(selectedElement);
-
-  const applyStyles = (stylesObj) => {
-    if (!selectedElement) return;
-    selectedElement.setAttribute('data-restyld-modified', '1');
-    const updates = {};
-    for (const [key, value] of Object.entries(stylesObj)) {
-      if (value !== undefined && value !== null && value !== '') {
-        selectedElement.style[key] = value;
-        updates[key] = value;
-      }
-    }
-    if (Object.keys(updates).length) recordModification(selectedElement, { styles: updates });
-  };
-
-  reactRoot.render(
-    <StrictMode>
-      <Sidebar
-        elementInfo={elementInfo}
-        initialStyles={initialStyles}
-        onStyleChange={applyStyles}
-        onDeselect={() => {
-          exitRepositionMode();
-          hidePanel();
-        }}
-        onRemove={() => {
-          if (selectedElement) {
-            const removedHtml = selectedElement.outerHTML;
-            recordModification(selectedElement, { removed: true, removedHtml });
-            selectedElement.remove();
-            selectedElement = null;
-            hidePanel();
-            exitRepositionMode();
-          }
-        }}
-        onReposition={() => enterRepositionMode()}
-        onRepositionDone={() => {
-          exitRepositionMode();
-          renderPanel();
-        }}
-        isRepositionMode={isRepositionMode}
-      />
-    </StrictMode>
-  );
+  if (selectedElement) notifySelection();
 }
 
 function updatePanelPosition() {
-  if (selectedElement && reactRoot) {
-    renderPanel();
-  }
+  if (selectedElement) notifySelection();
 }
 
 function showPanel() {
   if (!selectedElement) return;
-  if (!panelRoot) {
-    const div = document.createElement('div');
-    div.className = ROOT_CLASS;
-    div.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:2147483647';
-    const inner = document.createElement('div');
-    inner.style.pointerEvents = 'auto';
-    div.appendChild(inner);
-    document.body.appendChild(div);
-    panelRoot = inner;
-    reactRoot = createRoot(panelRoot);
-  }
-  renderPanel();
   createResizeHandles();
+  notifySelection();
 }
 
 function hidePanel() {
   removeResizeHandles();
-  if (reactRoot && panelRoot) {
-    reactRoot.render(null);
-  }
   clearSelectionBorder();
+  selectedElement = null;
+  notifySelection();
 }
 
 function enterRepositionMode() {
@@ -517,7 +463,7 @@ function exitRepositionMode() {
   if (selectedElement && selectedElement._restyldCleanupReposition) {
     selectedElement._restyldCleanupReposition();
   }
-  renderPanel();
+  if (selectedElement) notifySelection();
 }
 
 function handleMouseOver(e) {
@@ -568,11 +514,6 @@ function disableDesignMode() {
   clearHoverBorder();
   exitRepositionMode();
   hidePanel();
-  if (panelRoot && panelRoot.parentNode) {
-    panelRoot.parentNode.remove();
-    panelRoot = null;
-    reactRoot = null;
-  }
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -584,6 +525,53 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true, designMode: false });
   } else if (msg.type === 'GET_DESIGN_MODE') {
     sendResponse({ designMode });
+  } else if (msg.type === 'GET_SELECTED_ELEMENT') {
+    if (!selectedElement || !document.body.contains(selectedElement)) {
+      sendResponse({ selected: null });
+    } else {
+      sendResponse({
+        selected: {
+          elementInfo: getElementInfo(selectedElement),
+          initialStyles: getInitialStyles(selectedElement),
+        },
+        isRepositionMode,
+      });
+    }
+  } else if (msg.type === 'APPLY_STYLE') {
+    const styles = msg.styles || {};
+    if (selectedElement && document.body.contains(selectedElement)) {
+      selectedElement.setAttribute('data-restyld-modified', '1');
+      const updates = {};
+      for (const [key, value] of Object.entries(styles)) {
+        if (value !== undefined && value !== null && value !== '') {
+          selectedElement.style[key] = value;
+          updates[key] = value;
+        }
+      }
+      if (Object.keys(updates).length) recordModification(selectedElement, { styles: updates });
+    }
+    sendResponse({ ok: true });
+  } else if (msg.type === 'DESELECT') {
+    exitRepositionMode();
+    hidePanel();
+    sendResponse({ ok: true });
+  } else if (msg.type === 'REMOVE_ELEMENT') {
+    if (selectedElement) {
+      const removedHtml = selectedElement.outerHTML;
+      recordModification(selectedElement, { removed: true, removedHtml });
+      selectedElement.remove();
+      selectedElement = null;
+    }
+    removeResizeHandles();
+    clearSelectionBorder();
+    notifySelection();
+    sendResponse({ ok: true });
+  } else if (msg.type === 'REPOSITION_START') {
+    enterRepositionMode();
+    sendResponse({ ok: true });
+  } else if (msg.type === 'REPOSITION_DONE') {
+    exitRepositionMode();
+    sendResponse({ ok: true });
   } else if (msg.type === 'GET_MODIFICATIONS') {
     sendResponse({ ok: true, modifications: getCurrentModifications() });
   } else if (msg.type === 'APPLY_SKIN') {

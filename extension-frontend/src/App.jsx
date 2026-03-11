@@ -7,7 +7,9 @@ import {
   setActiveSkin,
   getActiveSkin,
 } from './lib/skinStorage.js'
+import Sidebar from './components/Sidebar.jsx'
 import './App.css'
+import './components/Sidebar.css'
 
 function App() {
   const [designMode, setDesignMode] = useState(false)
@@ -17,6 +19,8 @@ function App() {
   const [activeSkinId, setActiveSkinId] = useState(null)
   const [saveName, setSaveName] = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
+  const [selectedElement, setSelectedElement] = useState(null)
+  const [isRepositionMode, setIsRepositionMode] = useState(false)
 
   const loadSkins = useCallback(async (url) => {
     const h = getHostFromUrl(url)
@@ -33,8 +37,22 @@ function App() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
         if (tab?.url) await loadSkins(tab.url)
         if (tab?.id) {
-          const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_DESIGN_MODE' })
-          setDesignMode(res?.designMode ?? false)
+          try {
+            const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_DESIGN_MODE' })
+            setDesignMode(res?.designMode ?? false)
+            const sel = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SELECTED_ELEMENT' })
+            if (sel?.selected) {
+              setSelectedElement(sel.selected)
+              setIsRepositionMode(sel.isRepositionMode ?? false)
+            } else {
+              setSelectedElement(null)
+              setIsRepositionMode(false)
+            }
+          } catch {
+            setDesignMode(false)
+            setSelectedElement(null)
+            setIsRepositionMode(false)
+          }
         }
         setError(null)
       } catch {
@@ -44,6 +62,67 @@ function App() {
     }
     init()
   }, [loadSkins])
+
+  useEffect(() => {
+    const listener = (msg) => {
+      if (msg?.type === 'SELECTED_ELEMENT') {
+        setSelectedElement(msg.selected ?? null)
+        if (msg.selected) setIsRepositionMode(msg.isRepositionMode ?? false)
+        else setIsRepositionMode(false)
+      }
+    }
+    chrome.runtime.onMessage.addListener(listener)
+    return () => chrome.runtime.onMessage.removeListener(listener)
+  }, [])
+
+  async function sendToTab(message) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    if (!tab?.id) return null
+    return chrome.tabs.sendMessage(tab.id, message)
+  }
+
+  async function syncSelection() {
+    try {
+      const res = await sendToTab({ type: 'GET_SELECTED_ELEMENT' })
+      if (res?.selected) {
+        setSelectedElement(res.selected)
+        setIsRepositionMode(res.isRepositionMode ?? false)
+      } else {
+        setSelectedElement(null)
+        setIsRepositionMode(false)
+      }
+    } catch {
+      setSelectedElement(null)
+      setIsRepositionMode(false)
+    }
+  }
+
+  async function handleApplyStyle(styles) {
+    await sendToTab({ type: 'APPLY_STYLE', styles })
+  }
+
+  async function handleDeselect() {
+    await sendToTab({ type: 'DESELECT' })
+    setSelectedElement(null)
+    setIsRepositionMode(false)
+  }
+
+  async function handleRemove() {
+    await sendToTab({ type: 'REMOVE_ELEMENT' })
+    setSelectedElement(null)
+    setIsRepositionMode(false)
+  }
+
+  async function handleRepositionStart() {
+    await sendToTab({ type: 'REPOSITION_START' })
+    setIsRepositionMode(true)
+  }
+
+  async function handleRepositionDone() {
+    await sendToTab({ type: 'REPOSITION_DONE' })
+    setIsRepositionMode(false)
+    await syncSelection()
+  }
 
   async function ensureContentScript(tabId) {
     try {
@@ -67,6 +146,8 @@ function App() {
       if (designMode) {
         await chrome.tabs.sendMessage(tab.id, { type: 'DISABLE_DESIGN_MODE' })
         setDesignMode(false)
+        setSelectedElement(null)
+        setIsRepositionMode(false)
       } else {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -74,6 +155,7 @@ function App() {
         })
         const res = await chrome.tabs.sendMessage(tab.id, { type: 'ENABLE_DESIGN_MODE' })
         setDesignMode(res?.designMode ?? true)
+        if (res?.designMode) await syncSelection()
       }
     } catch (e) {
       setError(e?.message ?? 'Something went wrong')
@@ -170,96 +252,133 @@ function App() {
   const skinList = Object.entries(skins).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0))
 
   return (
-    <div className="popup">
-      <h1>ReStyld</h1>
-      <p className="subtitle">Style any website</p>
-      {host ? (
-        <p className="host-label">Skins for: {host}</p>
-      ) : (
-        <p className="host-label">Open a webpage to manage skins.</p>
-      )}
-      {error && <p className="error">{error}</p>}
-
-      {host && (
-        <div className="skin-list">
-          {skinList.length === 0 ? (
-            <p className="no-skins">No saved skins yet.</p>
-          ) : (
-            skinList.map(([id, skin]) => (
-              <div key={id} className="skin-item">
-                <span className="skin-name" title={skin.name}>
-                  {skin.name}
-                </span>
-                <div className="skin-actions">
-                  <button
-                    type="button"
-                    className="skin-btn load"
-                    onClick={() => handleLoadSkin(id)}
-                    title="Load and apply"
-                  >
-                    Load
-                  </button>
-                  <button
-                    type="button"
-                    className="skin-btn delete"
-                    onClick={() => handleDeleteSkin(id)}
-                    title="Delete skin"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
+    <div className="sidepanel">
+      <header className="sidepanel-header">
+        <div className="brand">
+          <span className="brand-name">ReStyld</span>
+          <span className="brand-tagline">Style any website</span>
         </div>
-      )}
+      </header>
 
-      {showSaveInput ? (
-        <div className="save-row">
-          <input
-            type="text"
-            className="save-input"
-            placeholder="Skin name"
-            value={saveName}
-            onChange={(e) => setSaveName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSaveSkin()}
-            autoFocus
-          />
-          <button type="button" className="skin-btn load" onClick={handleSaveSkin}>
-            Save
+      <main className="sidepanel-main">
+        {host ? (
+          <p className="host-badge" title={host}>
+            {host}
+          </p>
+        ) : (
+          <p className="host-empty">Open a webpage to manage skins.</p>
+        )}
+
+        {error && (
+          <div className="message message-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        {designMode && selectedElement && (
+          <section className="section editor-section">
+            <Sidebar
+              embedded
+              elementInfo={selectedElement.elementInfo}
+              initialStyles={selectedElement.initialStyles}
+              onStyleChange={handleApplyStyle}
+              onDeselect={handleDeselect}
+              onRemove={handleRemove}
+              onReposition={handleRepositionStart}
+              onRepositionDone={handleRepositionDone}
+              isRepositionMode={isRepositionMode}
+            />
+          </section>
+        )}
+
+        {host && (
+          <section className="section">
+            <h2 className="section-title">Saved skins</h2>
+            {skinList.length === 0 ? (
+              <p className="empty-state">No saved skins yet. Enter design mode and save your first.</p>
+            ) : (
+              <ul className="skin-list">
+                {skinList.map(([id, skin]) => (
+                  <li key={id} className={`skin-item ${activeSkinId === id ? 'skin-item-active' : ''}`}>
+                    <span className="skin-name" title={skin.name}>
+                      {skin.name}
+                    </span>
+                    <div className="skin-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => handleLoadSkin(id)}
+                        title="Load and apply"
+                      >
+                        Load
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost-danger"
+                        onClick={() => handleDeleteSkin(id)}
+                        title="Delete skin"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {showSaveInput ? (
+          <div className="save-inline">
+            <input
+              type="text"
+              className="save-input"
+              placeholder="Skin name"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveSkin()}
+              autoFocus
+            />
+            <div className="save-inline-actions">
+              <button type="button" className="btn btn-sm btn-primary" onClick={handleSaveSkin}>
+                Save
+              </button>
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowSaveInput(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-secondary full"
+            onClick={() => setShowSaveInput(true)}
+            title="Save current design changes as a new skin"
+          >
+            Save as new skin
           </button>
-          <button type="button" className="skin-btn delete" onClick={() => setShowSaveInput(false)}>
-            Cancel
-          </button>
-        </div>
-      ) : (
+        )}
+
         <button
           type="button"
-          className="design-mode-btn secondary"
-          onClick={() => setShowSaveInput(true)}
-          title="Save current design changes as a new skin"
+          className={`btn full ${designMode ? 'btn-danger' : 'btn-primary'}`}
+          onClick={toggleDesignMode}
         >
-          Save as new skin
+          {designMode ? 'Exit design mode' : 'Enter design mode'}
         </button>
-      )}
 
-      <button
-        type="button"
-        className={`design-mode-btn ${designMode ? 'active' : ''}`}
-        onClick={toggleDesignMode}
-      >
-        {designMode ? 'Exit design mode' : 'Enter design mode'}
-      </button>
+        {host && (
+          <button type="button" className="btn btn-ghost full" onClick={handleReset}>
+            Reset page to original
+          </button>
+        )}
 
-      {host && (
-        <button type="button" className="design-mode-btn reset" onClick={handleReset}>
-          Reset page to original
-        </button>
-      )}
-
-      {designMode && (
-        <p className="hint">Click any element on the page to select and edit it.</p>
-      )}
+        {designMode && (
+          <p className="hint">
+            Click any element on the page to select and edit it in the inspector.
+          </p>
+        )}
+      </main>
     </div>
   )
 }
