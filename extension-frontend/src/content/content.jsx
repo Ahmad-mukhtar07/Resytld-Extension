@@ -93,6 +93,72 @@ const modificationsMap = new Map();
 /** Modifications last applied (for reset when no list provided) */
 let lastAppliedModifications = [];
 
+const MAX_UNDO = 50;
+let undoStack = [];
+let redoStack = [];
+
+function snapshotModifications() {
+  return JSON.parse(JSON.stringify(getCurrentModifications()));
+}
+
+function pushUndoSnapshot() {
+  const snap = snapshotModifications();
+  undoStack.push(snap);
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+
+function applyState(state) {
+  const current = getCurrentModifications();
+  resetModifications(current);
+  applyModifications(state || []);
+  modificationsMap.clear();
+  if (Array.isArray(state)) {
+    state.forEach((mod) => {
+      if (mod && Array.isArray(mod.path)) modificationsMap.set(pathKey(mod.path), { ...mod });
+    });
+  }
+  updateResizeHandlesPosition();
+  notifySelection();
+}
+
+function performUndo() {
+  if (undoStack.length === 0) return;
+  const state = undoStack.pop();
+  redoStack.push(snapshotModifications());
+  applyState(state);
+}
+
+function performRedo() {
+  if (redoStack.length === 0) return;
+  const state = redoStack.pop();
+  undoStack.push(snapshotModifications());
+  applyState(state);
+}
+
+function handleUndoRedoKeydown(e) {
+  if (!designMode) return;
+  const inInput = e.target.closest('input, textarea, [contenteditable="true"]');
+  if (inInput) return;
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+  if (!cmdOrCtrl) return;
+  if (e.key === 'z' || e.key === 'Z') {
+    if (e.shiftKey && isMac) {
+      e.preventDefault();
+      performRedo();
+    } else {
+      e.preventDefault();
+      performUndo();
+    }
+    return;
+  }
+  if ((e.key === 'y' || e.key === 'Y') && !isMac) {
+    e.preventDefault();
+    performRedo();
+  }
+}
+
 function pathKey(path) {
   return Array.isArray(path) ? path.join(',') : '';
 }
@@ -268,6 +334,7 @@ function startResizeDrag(handleName, startEvent) {
   if (!el) return;
   startEvent.preventDefault();
   startEvent.stopPropagation();
+  pushUndoSnapshot();
   ensureElementPositionedForResize(el);
   const parent = el.offsetParent || el.parentElement || document.body;
   const parentRect = parent.getBoundingClientRect();
@@ -487,6 +554,7 @@ function attachDragToSelectedElement() {
       const dy = e2.clientY - startY;
       if (!dragStarted) {
         if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        pushUndoSnapshot();
         ensureElementPositionedForResize(el);
         const parent = el.offsetParent || el.parentElement || document.body;
         const parentRect = parent.getBoundingClientRect();
@@ -597,6 +665,7 @@ function enableDesignMode() {
   document.addEventListener('mouseover', handleMouseOver, true);
   document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
+  document.addEventListener('keydown', handleUndoRedoKeydown, true);
 }
 
 function disableDesignMode() {
@@ -605,6 +674,7 @@ function disableDesignMode() {
   document.removeEventListener('mouseover', handleMouseOver, true);
   document.removeEventListener('mouseout', handleMouseOut, true);
   document.removeEventListener('click', handleClick, true);
+  document.removeEventListener('keydown', handleUndoRedoKeydown, true);
   clearHoverBorder();
   removeDragFromSelectedElement();
   hidePanel();
@@ -634,6 +704,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   } else if (msg.type === 'APPLY_STYLE') {
     const styles = msg.styles || {};
     if (selectedElement && document.body.contains(selectedElement)) {
+      pushUndoSnapshot();
       selectedElement.setAttribute('data-restyld-modified', '1');
       const updates = {};
       for (const [key, value] of Object.entries(styles)) {
@@ -650,6 +721,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true });
   } else if (msg.type === 'REMOVE_ELEMENT') {
     if (selectedElement) {
+      pushUndoSnapshot();
       const removedHtml = selectedElement.outerHTML;
       recordModification(selectedElement, { removed: true, removedHtml });
       selectedElement.remove();
@@ -668,6 +740,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true, modifications: getCurrentModifications() });
   } else if (msg.type === 'APPLY_SKIN') {
     const modifications = msg.modifications || [];
+    undoStack.length = 0;
+    redoStack.length = 0;
     const result = applyModifications(modifications);
     lastAppliedModifications = modifications;
     modificationsMap.clear();
@@ -676,6 +750,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     });
     sendResponse({ ok: true, ...result });
   } else if (msg.type === 'RESET') {
+    undoStack.length = 0;
+    redoStack.length = 0;
     const list = msg.modifications != null ? msg.modifications : lastAppliedModifications;
     let result;
     if (Array.isArray(list) && list.length > 0) {
