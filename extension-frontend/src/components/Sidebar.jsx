@@ -37,9 +37,6 @@ export default function Sidebar({
   onStyleChange,
   onDeselect,
   onRemove,
-  onReposition,
-  onRepositionDone,
-  isRepositionMode,
 }) {
   const [minimized, setMinimized] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
@@ -453,9 +450,6 @@ export default function Sidebar({
         <div className="restyld-sb-actions">
           <button type="button" className="restyld-sb-actionBtn restyld-sb-actionBtnSecondary" onClick={onDeselect}>
             Deselect
-          </button>
-          <button type="button" className="restyld-sb-actionBtn restyld-sb-actionBtnPrimary" onClick={isRepositionMode ? onRepositionDone : onReposition}>
-            {isRepositionMode ? 'Done moving' : 'Reposition'}
           </button>
           <button type="button" className="restyld-sb-actionBtn restyld-sb-actionBtnDanger" onClick={onRemove}>
             Remove

@@ -20,8 +20,9 @@ const SELECT_BORDER = '3px solid #2563eb';
 let designMode = false;
 let hoveredElement = null;
 let selectedElement = null;
-let isRepositionMode = false;
 let rafId = null;
+
+const DRAG_THRESHOLD = 4;
 
 let resizeHandlesRoot = null;
 let resizeRafId = null;
@@ -357,7 +358,7 @@ function notifySelection() {
       selected: selectedElement
         ? { elementInfo: getElementInfo(selectedElement), initialStyles: getInitialStyles(selectedElement) }
         : null,
-      isRepositionMode: selectedElement ? isRepositionMode : false,
+      isRepositionMode: false,
     });
   } catch (_) {}
 }
@@ -373,69 +374,61 @@ function updatePanelPosition() {
 function showPanel() {
   if (!selectedElement) return;
   createResizeHandles();
+  attachDragToSelectedElement();
   notifySelection();
 }
 
 function hidePanel() {
+  removeDragFromSelectedElement();
   removeResizeHandles();
   clearSelectionBorder();
   selectedElement = null;
   notifySelection();
 }
 
-function enterRepositionMode() {
-  if (!selectedElement) return;
-  isRepositionMode = true;
+function attachDragToSelectedElement() {
   const el = selectedElement;
-  const parent = el.offsetParent || el.parentElement || document.body;
-  const parentStyle = getComputedStyle(parent);
-  if (parentStyle.position === 'static') {
-    parent.style.setProperty('position', 'relative');
-    parent.dataset.restyldParentPosition = 'relative';
-  }
-  const parentRect = parent.getBoundingClientRect();
-  const elRect = el.getBoundingClientRect();
-  const startLeft = elRect.left - parentRect.left;
-  const startTop = elRect.top - parentRect.top;
-  el.style.position = 'absolute';
-  el.style.left = `${startLeft}px`;
-  el.style.top = `${startTop}px`;
-  el.style.width = `${elRect.width}px`;
-  el.style.height = `${elRect.height}px`;
-  el.style.margin = '0';
-  el.setAttribute('data-restyld-modified', '1');
-  recordModification(el, {
-    styles: {
-      position: 'absolute',
-      left: startLeft + 'px',
-      top: startTop + 'px',
-      width: elRect.width + 'px',
-      height: elRect.height + 'px',
-      margin: '0',
-    },
-  });
-  renderPanel();
+  if (!el || !document.body.contains(el)) return;
+  removeDragFromSelectedElement();
 
   const onMouseDown = (e) => {
     if (e.target !== el && !el.contains(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startLeftDrag = parseFloat(el.style.left) || 0;
-    const startTopDrag = parseFloat(el.style.top) || 0;
+    let startX = e.clientX;
+    let startY = e.clientY;
+    let dragStarted = false;
+    let startLeft = 0;
+    let startTop = 0;
 
     const onMouseMove = (e2) => {
+      const dx = e2.clientX - startX;
+      const dy = e2.clientY - startY;
+      if (!dragStarted) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        ensureElementPositionedForResize(el);
+        const parent = el.offsetParent || el.parentElement || document.body;
+        const parentRect = parent.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        startLeft = elRect.left - parentRect.left;
+        startTop = elRect.top - parentRect.top;
+        startX = e2.clientX;
+        startY = e2.clientY;
+        dragStarted = true;
+      }
       if (rafId != null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const dx = e2.clientX - startX;
-        const dy = e2.clientY - startY;
-        const newLeft = startLeftDrag + dx;
-        const newTop = startTopDrag + dy;
+        const newLeft = startLeft + (e2.clientX - startX);
+        const newTop = startTop + (e2.clientY - startY);
         el.style.left = `${newLeft}px`;
         el.style.top = `${newTop}px`;
         recordModification(el, { styles: { left: el.style.left, top: el.style.top } });
+        updateResizeHandlesPosition();
+        startLeft = newLeft;
+        startTop = newTop;
+        startX = e2.clientX;
+        startY = e2.clientY;
       });
     };
 
@@ -443,27 +436,24 @@ function enterRepositionMode() {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       if (rafId != null) cancelAnimationFrame(rafId);
+      if (dragStarted) notifySelection();
     };
 
     document.addEventListener('mousemove', onMouseMove, { passive: true });
     document.addEventListener('mouseup', onMouseUp, { once: true });
   };
 
-  el.addEventListener('mousedown', onMouseDown);
-  el.dataset.restyldRepositionListener = '1';
-  el._restyldCleanupReposition = () => {
-    el.removeEventListener('mousedown', onMouseDown);
-    delete el._restyldCleanupReposition;
-    delete el.dataset.restyldRepositionListener;
+  el.addEventListener('mousedown', onMouseDown, true);
+  el._restyldCleanupDrag = () => {
+    el.removeEventListener('mousedown', onMouseDown, true);
+    delete el._restyldCleanupDrag;
   };
 }
 
-function exitRepositionMode() {
-  isRepositionMode = false;
-  if (selectedElement && selectedElement._restyldCleanupReposition) {
-    selectedElement._restyldCleanupReposition();
+function removeDragFromSelectedElement() {
+  if (selectedElement && selectedElement._restyldCleanupDrag) {
+    selectedElement._restyldCleanupDrag();
   }
-  if (selectedElement) notifySelection();
 }
 
 function handleMouseOver(e) {
@@ -512,7 +502,7 @@ function disableDesignMode() {
   document.removeEventListener('mouseout', handleMouseOut, true);
   document.removeEventListener('click', handleClick, true);
   clearHoverBorder();
-  exitRepositionMode();
+  removeDragFromSelectedElement();
   hidePanel();
 }
 
@@ -534,7 +524,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           elementInfo: getElementInfo(selectedElement),
           initialStyles: getInitialStyles(selectedElement),
         },
-        isRepositionMode,
+        isRepositionMode: false,
       });
     }
   } else if (msg.type === 'APPLY_STYLE') {
@@ -552,7 +542,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
     sendResponse({ ok: true });
   } else if (msg.type === 'DESELECT') {
-    exitRepositionMode();
     hidePanel();
     sendResponse({ ok: true });
   } else if (msg.type === 'REMOVE_ELEMENT') {
@@ -567,10 +556,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     notifySelection();
     sendResponse({ ok: true });
   } else if (msg.type === 'REPOSITION_START') {
-    enterRepositionMode();
     sendResponse({ ok: true });
   } else if (msg.type === 'REPOSITION_DONE') {
-    exitRepositionMode();
+    if (selectedElement) notifySelection();
     sendResponse({ ok: true });
   } else if (msg.type === 'GET_MODIFICATIONS') {
     sendResponse({ ok: true, modifications: getCurrentModifications() });

@@ -20,7 +20,6 @@ function App() {
   const [saveName, setSaveName] = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [selectedElement, setSelectedElement] = useState(null)
-  const [isRepositionMode, setIsRepositionMode] = useState(false)
   const [openSkinsSection, setOpenSkinsSection] = useState(true)
   const [openEditorSection, setOpenEditorSection] = useState(true)
 
@@ -45,15 +44,13 @@ function App() {
             const sel = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SELECTED_ELEMENT' })
             if (sel?.selected) {
               setSelectedElement(sel.selected)
-              setIsRepositionMode(sel.isRepositionMode ?? false)
+              setOpenEditorSection(true)
             } else {
               setSelectedElement(null)
-              setIsRepositionMode(false)
             }
           } catch {
             setDesignMode(false)
             setSelectedElement(null)
-            setIsRepositionMode(false)
           }
         }
         setError(null)
@@ -69,12 +66,7 @@ function App() {
     const listener = (msg) => {
       if (msg?.type === 'SELECTED_ELEMENT') {
         setSelectedElement(msg.selected ?? null)
-        if (msg.selected) {
-          setIsRepositionMode(msg.isRepositionMode ?? false)
-          setOpenEditorSection(true)
-        } else {
-          setIsRepositionMode(false)
-        }
+        if (msg.selected) setOpenEditorSection(true)
       }
     }
     chrome.runtime.onMessage.addListener(listener)
@@ -92,14 +84,11 @@ function App() {
       const res = await sendToTab({ type: 'GET_SELECTED_ELEMENT' })
       if (res?.selected) {
         setSelectedElement(res.selected)
-        setIsRepositionMode(res.isRepositionMode ?? false)
       } else {
         setSelectedElement(null)
-        setIsRepositionMode(false)
       }
     } catch {
       setSelectedElement(null)
-      setIsRepositionMode(false)
     }
   }
 
@@ -110,24 +99,11 @@ function App() {
   async function handleDeselect() {
     await sendToTab({ type: 'DESELECT' })
     setSelectedElement(null)
-    setIsRepositionMode(false)
   }
 
   async function handleRemove() {
     await sendToTab({ type: 'REMOVE_ELEMENT' })
     setSelectedElement(null)
-    setIsRepositionMode(false)
-  }
-
-  async function handleRepositionStart() {
-    await sendToTab({ type: 'REPOSITION_START' })
-    setIsRepositionMode(true)
-  }
-
-  async function handleRepositionDone() {
-    await sendToTab({ type: 'REPOSITION_DONE' })
-    setIsRepositionMode(false)
-    await syncSelection()
   }
 
   async function ensureContentScript(tabId) {
@@ -153,7 +129,6 @@ function App() {
         await chrome.tabs.sendMessage(tab.id, { type: 'DISABLE_DESIGN_MODE' })
         setDesignMode(false)
         setSelectedElement(null)
-        setIsRepositionMode(false)
       } else {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -404,9 +379,6 @@ function App() {
                   onStyleChange={handleApplyStyle}
                   onDeselect={handleDeselect}
                   onRemove={handleRemove}
-                  onReposition={handleRepositionStart}
-                  onRepositionDone={handleRepositionDone}
-                  isRepositionMode={isRepositionMode}
                 />
               </section>
             </div>
