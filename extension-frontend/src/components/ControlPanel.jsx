@@ -81,8 +81,10 @@ export default function ControlPanel({
       className="restyld-panel"
       style={{
         position: 'fixed',
-        left: position.x,
-        top: position.y + position.height + PANEL_OFFSET,
+        left: position.panelLeft ?? position.x,
+        ...(position.placement === 'above' && position.panelBottom != null
+          ? { bottom: position.panelBottom, top: 'auto' }
+          : { top: position.panelTop ?? position.y + position.height + PANEL_OFFSET }),
         zIndex: 2147483647,
       }}
     >

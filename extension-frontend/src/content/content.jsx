@@ -108,11 +108,34 @@ function getElementDimensions(el) {
 
 function getPanelPosition(el) {
   const rect = el.getBoundingClientRect();
+  const PANEL_OFFSET = 8;
+  const ESTIMATED_PANEL_HEIGHT = 320;
+  const ESTIMATED_PANEL_WIDTH = 220;
+  const viewportH = window.innerHeight;
+  const viewportW = window.innerWidth;
+  const belowTop = rect.bottom + PANEL_OFFSET;
+  const useAbove = belowTop + ESTIMATED_PANEL_HEIGHT > viewportH;
+  let panelTop = belowTop;
+  let panelBottom;
+  let placement = 'below';
+  if (useAbove) {
+    placement = 'above';
+    panelBottom = viewportH - rect.top + PANEL_OFFSET;
+  } else {
+    panelTop = Math.max(0, panelTop);
+  }
+  let panelLeft = rect.left;
+  if (panelLeft + ESTIMATED_PANEL_WIDTH > viewportW) panelLeft = viewportW - ESTIMATED_PANEL_WIDTH;
+  if (panelLeft < 0) panelLeft = 0;
   return {
     x: rect.left,
     y: rect.top,
     width: rect.width,
     height: rect.height,
+    panelTop,
+    panelBottom,
+    panelLeft,
+    placement,
   };
 }
 
