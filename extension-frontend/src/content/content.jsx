@@ -3,7 +3,7 @@
  * Selection and resize handles on page; editing UI lives in extension side panel.
  */
 import panelCss from './panel.css?raw';
-import { getPath } from '../lib/pathUtils.js';
+import { getPath, getElementByPath } from '../lib/pathUtils.js';
 import { applyModifications, resetModifications, clearAllMarkedStyles } from '../lib/applySkin.js';
 import { getCandidateRects, computeDragGuides, computeResizeGuides } from './alignmentGuides.js';
 
@@ -96,6 +96,8 @@ const DUPLICATE_OFFSET = 10;
 
 /** Map pathKey -> { path, styles, removed?, removedHtml? } for current page modifications */
 const modificationsMap = new Map();
+/** Removed elements (path + html) so multiple deletes don't overwrite the same path */
+let removedList = [];
 /** Modifications last applied (for reset when no list provided) */
 let lastAppliedModifications = [];
 
@@ -118,7 +120,16 @@ function applyState(state) {
   const current = getCurrentModifications();
   resetModifications(current);
   applyModifications(state || []);
+  const statePaths = new Set((state || []).map((mod) => mod && Array.isArray(mod.path) ? pathKey(mod.path) : ''));
+  const toRemove = current.filter((mod) => mod && Array.isArray(mod.path) && !mod.removed && !statePaths.has(pathKey(mod.path)));
+  toRemove.sort((a, b) => pathKey(b.path).localeCompare(pathKey(a.path)));
+  for (const mod of toRemove) {
+    const el = getElementByPath(document.body, mod.path);
+    if (el && el.parentNode) el.remove();
+  }
+  if (selectedElement && !document.body.contains(selectedElement)) selectedElement = null;
   modificationsMap.clear();
+  removedList = [];
   if (Array.isArray(state)) {
     state.forEach((mod) => {
       if (mod && Array.isArray(mod.path)) modificationsMap.set(pathKey(mod.path), { ...mod });
@@ -174,6 +185,11 @@ function recordModification(el, updates) {
   const path = getPath(el);
   if (path.length === 0) return;
   const key = pathKey(path);
+  if (updates.removed !== undefined && updates.removed) {
+    removedList.push({ path: path.slice(), removedHtml: updates.removedHtml });
+    modificationsMap.delete(key);
+    return;
+  }
   const existing = modificationsMap.get(key) || { path, styles: {} };
   if (updates.removed !== undefined) {
     existing.removed = updates.removed;
@@ -186,7 +202,9 @@ function recordModification(el, updates) {
 }
 
 function getCurrentModifications() {
-  return Array.from(modificationsMap.values());
+  const fromMap = Array.from(modificationsMap.values());
+  const fromRemoved = removedList.map((r) => ({ path: r.path, removed: true, removedHtml: r.removedHtml }));
+  return fromMap.concat(fromRemoved);
 }
 
 const container = () => document.querySelector(`.${ROOT_CLASS}`);
@@ -538,14 +556,14 @@ function createFloatingToolbar() {
   lockBtn.type = 'button';
   lockBtn.className = 'restyld-toolbar-btn' + (isElementLocked(selectedElement) ? ' restyld-toolbar-btn--active' : '');
   lockBtn.setAttribute('data-tooltip', isElementLocked(selectedElement) ? 'Unlock position' : 'Lock position');
-  lockBtn.innerHTML = isElementLocked(selectedElement) ? LOCK_ICON_CLOSED : LOCK_ICON;
+  lockBtn.innerHTML = isElementLocked(selectedElement) ? LOCK_ICON : LOCK_ICON_CLOSED;
   lockBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     const locked = !isElementLocked(selectedElement);
     setElementLocked(selectedElement, locked);
     lockBtn.classList.toggle('restyld-toolbar-btn--active', locked);
-    lockBtn.innerHTML = locked ? LOCK_ICON_CLOSED : LOCK_ICON;
+    lockBtn.innerHTML = locked ? LOCK_ICON : LOCK_ICON_CLOSED;
     lockBtn.setAttribute('data-tooltip', locked ? 'Unlock position' : 'Lock position');
   });
 
@@ -933,6 +951,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const result = applyModifications(modifications);
     lastAppliedModifications = modifications;
     modificationsMap.clear();
+    removedList = [];
     modifications.forEach((mod) => {
       if (mod && Array.isArray(mod.path)) modificationsMap.set(pathKey(mod.path), { ...mod });
     });
@@ -946,9 +965,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       result = resetModifications(list);
       lastAppliedModifications = [];
       modificationsMap.clear();
+      removedList = [];
     } else {
       result = { cleared: clearAllMarkedStyles(), restored: 0, missing: 0 };
       modificationsMap.clear();
+      removedList = [];
     }
     sendResponse({ ok: true, ...result });
   }

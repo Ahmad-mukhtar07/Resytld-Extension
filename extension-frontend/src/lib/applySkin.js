@@ -74,36 +74,44 @@ function clearElementStyles(el) {
 
 /**
  * Reset page: remove all applied styles from elements we marked, and re-insert removed elements.
+ * Removed elements are restored in descending path order so insertions don't shift later paths.
  * @param {Array<{ path: number[], styles?, removed?: boolean, removedHtml?: string }>} modifications - Same format as saved
  * @returns {{ cleared: number, restored: number, missing: number }}
  */
 export function resetModifications(modifications) {
   const result = { cleared: 0, restored: 0, missing: 0 };
   if (!Array.isArray(modifications)) return result;
-  for (const mod of modifications) {
-    if (!mod || !Array.isArray(mod.path)) continue;
-    if (mod.removed && mod.removedHtml) {
-      const parentPath = mod.path.slice(0, -1);
-      const childIndex = mod.path[mod.path.length - 1];
-      const parent = parentPath.length === 0 ? ROOT : getElementByPath(ROOT, parentPath);
-      if (!parent) {
-        result.missing++;
-        continue;
-      }
-      try {
-        const wrap = document.createElement('div');
-        wrap.innerHTML = mod.removedHtml;
-        const child = wrap.firstElementChild;
-        if (child) {
-          const ref = parent.children[childIndex] || null;
-          parent.insertBefore(child, ref);
-          result.restored++;
-        }
-      } catch {
-        result.missing++;
-      }
+  const pathKey = (p) => (Array.isArray(p) ? p.join(',') : '');
+  const removed = modifications.filter((mod) => mod && mod.removed && mod.removedHtml && Array.isArray(mod.path));
+  const rest = modifications.filter((mod) => !mod || !mod.removed || !mod.removedHtml);
+  removed.sort((a, b) => pathKey(b.path).localeCompare(pathKey(a.path)));
+  for (const mod of removed) {
+    const parentPath = mod.path.slice(0, -1);
+    const childIndex = mod.path[mod.path.length - 1];
+    const parent = parentPath.length === 0 ? ROOT : getElementByPath(ROOT, parentPath);
+    if (!parent) {
+      result.missing++;
       continue;
     }
+    try {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = mod.removedHtml;
+      const child = wrap.firstElementChild;
+      if (child) {
+        child.style.outline = '';
+        child.style.outlineOffset = '';
+        child.classList.remove('restyld-selected');
+        const ref = parent.children[childIndex] || null;
+        parent.insertBefore(child, ref);
+        result.restored++;
+      }
+    } catch {
+      result.missing++;
+    }
+  }
+  for (const mod of rest) {
+    if (!mod || !Array.isArray(mod.path)) continue;
+    if (mod.removed && mod.removedHtml) continue;
     const el = getElementByPath(ROOT, mod.path);
     if (!el) {
       result.missing++;
