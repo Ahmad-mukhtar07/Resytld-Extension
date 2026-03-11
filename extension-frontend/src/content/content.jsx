@@ -30,6 +30,13 @@ let isRepositionMode = false;
 let dragState = null;
 let rafId = null;
 
+let resizeHandlesRoot = null;
+let resizeRafId = null;
+const RESIZE_HANDLE_SIZE = 6;
+const RESIZE_EDGE_WIDTH = 10;
+const RESIZE_EDGE_THIN = 4;
+const HANDLES = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+
 /** Map pathKey -> { path, styles, removed?, removedHtml? } for current page modifications */
 const modificationsMap = new Map();
 /** Modifications last applied (for reset when no list provided) */
@@ -146,6 +153,210 @@ function getInitialStyles(el) {
   };
 }
 
+function ensureElementPositionedForResize(el) {
+  if (!el || !document.body.contains(el)) return;
+  const parent = el.offsetParent || el.parentElement || document.body;
+  const parentStyle = getComputedStyle(parent);
+  if (parentStyle.position === 'static') {
+    parent.style.setProperty('position', 'relative');
+    parent.dataset.restyldParentPosition = 'relative';
+  }
+  const parentRect = parent.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const left = elRect.left - parentRect.left;
+  const top = elRect.top - parentRect.top;
+  el.style.position = 'absolute';
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.style.width = `${elRect.width}px`;
+  el.style.height = `${elRect.height}px`;
+  el.style.margin = '0';
+  el.setAttribute('data-restyld-modified', '1');
+  recordModification(el, {
+    styles: {
+      position: 'absolute',
+      left: left + 'px',
+      top: top + 'px',
+      width: elRect.width + 'px',
+      height: elRect.height + 'px',
+      margin: '0',
+    },
+  });
+}
+
+function updateResizeHandlesPosition() {
+  if (!resizeHandlesRoot || !selectedElement || !document.body.contains(selectedElement)) return;
+  const rect = selectedElement.getBoundingClientRect();
+  const h = RESIZE_HANDLE_SIZE / 2;
+  const ew = RESIZE_EDGE_WIDTH / 2;
+  const et = RESIZE_EDGE_THIN / 2;
+  const positions = {
+    n:  [rect.left + rect.width / 2 - ew, rect.top - et],
+    ne: [rect.right - h, rect.top - h],
+    e:  [rect.right - et, rect.top + rect.height / 2 - ew],
+    se: [rect.right - h, rect.bottom - h],
+    s:  [rect.left + rect.width / 2 - ew, rect.bottom - et],
+    sw: [rect.left - h, rect.bottom - h],
+    w:  [rect.left - et, rect.top + rect.height / 2 - ew],
+    nw: [rect.left - h, rect.top - h],
+  };
+  HANDLES.forEach((name) => {
+    const handle = resizeHandlesRoot.querySelector(`[data-handle="${name}"]`);
+    if (handle) {
+      handle.style.left = `${positions[name][0]}px`;
+      handle.style.top = `${positions[name][1]}px`;
+    }
+  });
+}
+
+function startResizeDrag(handleName, startEvent) {
+  const el = selectedElement;
+  if (!el) return;
+  startEvent.preventDefault();
+  startEvent.stopPropagation();
+  ensureElementPositionedForResize(el);
+  const parent = el.offsetParent || el.parentElement || document.body;
+  const parentRect = parent.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  let startX = startEvent.clientX;
+  let startY = startEvent.clientY;
+  let startLeft = elRect.left - parentRect.left;
+  let startTop = elRect.top - parentRect.top;
+  let startWidth = elRect.width;
+  let startHeight = elRect.height;
+
+  const onMouseMove = (e) => {
+    if (rafId != null) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      let left = startLeft;
+      let top = startTop;
+      let width = startWidth;
+      let height = startHeight;
+      switch (handleName) {
+        case 'e':
+          width = Math.max(4, startWidth + dx);
+          break;
+        case 'w':
+          left = startLeft + dx;
+          width = Math.max(4, startWidth - dx);
+          startX = e.clientX;
+          startLeft = left;
+          startWidth = width;
+          break;
+        case 's':
+          height = Math.max(4, startHeight + dy);
+          break;
+        case 'n':
+          top = startTop + dy;
+          height = Math.max(4, startHeight - dy);
+          startY = e.clientY;
+          startTop = top;
+          startHeight = height;
+          break;
+        case 'se':
+          width = Math.max(4, startWidth + dx);
+          height = Math.max(4, startHeight + dy);
+          break;
+        case 'sw':
+          left = startLeft + dx;
+          width = Math.max(4, startWidth - dx);
+          height = Math.max(4, startHeight + dy);
+          startX = e.clientX;
+          startY = e.clientY;
+          startLeft = left;
+          startWidth = width;
+          startHeight = height;
+          break;
+        case 'ne':
+          top = startTop + dy;
+          width = Math.max(4, startWidth + dx);
+          height = Math.max(4, startHeight - dy);
+          startX = e.clientX;
+          startY = e.clientY;
+          startTop = top;
+          startWidth = width;
+          startHeight = height;
+          break;
+        case 'nw':
+          left = startLeft + dx;
+          top = startTop + dy;
+          width = Math.max(4, startWidth - dx);
+          height = Math.max(4, startHeight - dy);
+          startX = e.clientX;
+          startY = e.clientY;
+          startLeft = left;
+          startTop = top;
+          startWidth = width;
+          startHeight = height;
+          break;
+        default:
+          break;
+      }
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${width}px`;
+      el.style.height = `${height}px`;
+      recordModification(el, {
+        styles: {
+          left: left + 'px',
+          top: top + 'px',
+          width: width + 'px',
+          height: height + 'px',
+        },
+      });
+      updateResizeHandlesPosition();
+    });
+  };
+
+  const onMouseUp = () => {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    if (rafId != null) cancelAnimationFrame(rafId);
+  };
+
+  document.addEventListener('mousemove', onMouseMove, { passive: true });
+  document.addEventListener('mouseup', onMouseUp, { once: true });
+}
+
+function createResizeHandles() {
+  removeResizeHandles();
+  if (!selectedElement || !panelRoot || !panelRoot.parentNode) return;
+  const container = document.createElement('div');
+  container.className = 'restyld-resize-handles';
+  resizeHandlesRoot = container;
+  HANDLES.forEach((name) => {
+    const handle = document.createElement('div');
+    handle.className = 'restyld-resize-handle';
+    handle.setAttribute('data-handle', name);
+    handle.addEventListener('mousedown', (e) => startResizeDrag(name, e));
+    container.appendChild(handle);
+  });
+  panelRoot.parentNode.appendChild(container);
+  updateResizeHandlesPosition();
+
+  const loop = () => {
+    if (resizeHandlesRoot && selectedElement && document.body.contains(selectedElement)) {
+      updateResizeHandlesPosition();
+    }
+    resizeRafId = requestAnimationFrame(loop);
+  };
+  resizeRafId = requestAnimationFrame(loop);
+}
+
+function removeResizeHandles() {
+  if (resizeRafId != null) {
+    cancelAnimationFrame(resizeRafId);
+    resizeRafId = null;
+  }
+  if (resizeHandlesRoot && resizeHandlesRoot.parentNode) {
+    resizeHandlesRoot.parentNode.removeChild(resizeHandlesRoot);
+  }
+  resizeHandlesRoot = null;
+}
+
 function renderPanel() {
   if (!panelRoot || !selectedElement || !reactRoot) return;
   const elementInfo = getElementInfo(selectedElement);
@@ -215,9 +426,11 @@ function showPanel() {
     reactRoot = createRoot(panelRoot);
   }
   renderPanel();
+  createResizeHandles();
 }
 
 function hidePanel() {
+  removeResizeHandles();
   if (reactRoot && panelRoot) {
     reactRoot.render(null);
   }
