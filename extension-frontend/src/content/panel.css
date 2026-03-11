@@ -283,3 +283,118 @@
   from { opacity: 0; }
   to { opacity: 0.9; }
 }
+
+/* Floating selection toolbar - Canva-style */
+.restyld-toolbar-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2147483645;
+}
+
+.restyld-floating-toolbar {
+  position: fixed;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  animation: restyld-toolbar-in 0.2s ease-out;
+}
+
+@keyframes restyld-toolbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.restyld-toolbar-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  position: relative;
+}
+
+.restyld-toolbar-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.restyld-toolbar-btn:active {
+  background: #e5e7eb;
+}
+
+.restyld-toolbar-btn.restyld-toolbar-btn--active {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.restyld-toolbar-btn.restyld-toolbar-btn--danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.restyld-toolbar-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.restyld-toolbar-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  padding: 4px 8px;
+  font: 11px/1.3 system-ui, sans-serif;
+  color: #fff;
+  background: #374151;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.restyld-toolbar-btn:hover[data-tooltip]::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.restyld-toolbar-btn.restyld-toolbar-confirm[data-tooltip]::after {
+  content: attr(data-tooltip-confirm);
+  background: #dc2626;
+}
+
+.restyld-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: #e5e7eb;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* Locked element indicator */
+.restyld-selected.restyld-locked {
+  outline-color: #6b7280 !important;
+}

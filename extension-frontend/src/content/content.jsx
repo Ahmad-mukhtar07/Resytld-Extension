@@ -88,6 +88,12 @@ const RESIZE_EDGE_WIDTH = 10;
 const RESIZE_EDGE_THIN = 4;
 const HANDLES = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 
+let floatingToolbarRoot = null;
+const TOOLBAR_GAP = 10;
+const TOOLBAR_EST_HEIGHT = 44;
+const TOOLBAR_EST_WIDTH = 160;
+const DUPLICATE_OFFSET = 10;
+
 /** Map pathKey -> { path, styles, removed?, removedHtml? } for current page modifications */
 const modificationsMap = new Map();
 /** Modifications last applied (for reset when no list provided) */
@@ -186,7 +192,7 @@ function getCurrentModifications() {
 const container = () => document.querySelector(`.${ROOT_CLASS}`);
 
 function isOurUI(target) {
-  return target.closest(`.${ROOT_CLASS}`) != null || target.closest('.restyld-resize-handles') != null;
+  return target.closest(`.${ROOT_CLASS}`) != null || target.closest('.restyld-resize-handles') != null || target.closest('.restyld-toolbar-overlay') != null;
 }
 
 function clearHoverBorder() {
@@ -332,6 +338,7 @@ function updateResizeHandlesPosition() {
 function startResizeDrag(handleName, startEvent) {
   const el = selectedElement;
   if (!el) return;
+  if (isElementLocked(el)) return;
   startEvent.preventDefault();
   startEvent.stopPropagation();
   pushUndoSnapshot();
@@ -480,6 +487,7 @@ function createResizeHandles() {
   const loop = () => {
     if (resizeHandlesRoot && selectedElement && document.body.contains(selectedElement)) {
       updateResizeHandlesPosition();
+      updateFloatingToolbarPosition();
     }
     resizeRafId = requestAnimationFrame(loop);
   };
@@ -495,6 +503,183 @@ function removeResizeHandles() {
     resizeHandlesRoot.parentNode.removeChild(resizeHandlesRoot);
   }
   resizeHandlesRoot = null;
+}
+
+function isElementLocked(el) {
+  return el && el.dataset.restyldLocked === '1';
+}
+
+function setElementLocked(el, locked) {
+  if (!el) return;
+  if (locked) {
+    el.dataset.restyldLocked = '1';
+    el.classList.add('restyld-locked');
+  } else {
+    delete el.dataset.restyldLocked;
+    el.classList.remove('restyld-locked');
+  }
+}
+
+const LOCK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+const LOCK_ICON_CLOSED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
+const DUPLICATE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+const MORE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg>';
+
+function createFloatingToolbar() {
+  removeFloatingToolbar();
+  if (!selectedElement || !document.body.contains(selectedElement)) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'restyld-toolbar-overlay';
+  const bar = document.createElement('div');
+  bar.className = 'restyld-floating-toolbar';
+
+  const lockBtn = document.createElement('button');
+  lockBtn.type = 'button';
+  lockBtn.className = 'restyld-toolbar-btn' + (isElementLocked(selectedElement) ? ' restyld-toolbar-btn--active' : '');
+  lockBtn.setAttribute('data-tooltip', isElementLocked(selectedElement) ? 'Unlock position' : 'Lock position');
+  lockBtn.innerHTML = isElementLocked(selectedElement) ? LOCK_ICON_CLOSED : LOCK_ICON;
+  lockBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const locked = !isElementLocked(selectedElement);
+    setElementLocked(selectedElement, locked);
+    lockBtn.classList.toggle('restyld-toolbar-btn--active', locked);
+    lockBtn.innerHTML = locked ? LOCK_ICON_CLOSED : LOCK_ICON;
+    lockBtn.setAttribute('data-tooltip', locked ? 'Unlock position' : 'Lock position');
+  });
+
+  const duplicateBtn = document.createElement('button');
+  duplicateBtn.type = 'button';
+  duplicateBtn.className = 'restyld-toolbar-btn';
+  duplicateBtn.setAttribute('data-tooltip', 'Duplicate');
+  duplicateBtn.innerHTML = DUPLICATE_ICON;
+  duplicateBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedElement || !document.body.contains(selectedElement)) return;
+    pushUndoSnapshot();
+    const parent = selectedElement.parentElement || document.body;
+    const clone = selectedElement.cloneNode(true);
+    clone.removeAttribute('data-restyld-modified');
+    clone.removeAttribute('data-restyld-locked');
+    clone.classList.remove('restyld-selected', 'restyld-locked');
+    const idx = Array.from(parent.children).indexOf(selectedElement);
+    parent.insertBefore(clone, parent.children[idx + 1] || null);
+    const rect = selectedElement.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const parentStyle = getComputedStyle(parent);
+    if (parentStyle.position === 'static') {
+      parent.style.setProperty('position', 'relative');
+      parent.dataset.restyldParentPosition = 'relative';
+    }
+    const left = rect.left - parentRect.left + DUPLICATE_OFFSET;
+    const top = rect.top - parentRect.top + DUPLICATE_OFFSET;
+    clone.style.position = 'absolute';
+    clone.style.left = `${left}px`;
+    clone.style.top = `${top}px`;
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.margin = '0';
+    clone.setAttribute('data-restyld-modified', '1');
+    recordModification(clone, {
+      styles: {
+        position: 'absolute',
+        left: left + 'px',
+        top: top + 'px',
+        width: rect.width + 'px',
+        height: rect.height + 'px',
+        margin: '0',
+      },
+    });
+    setSelectionBorder(clone);
+    removeFloatingToolbar();
+    createFloatingToolbar();
+    removeDragFromSelectedElement();
+    attachDragToSelectedElement();
+    notifySelection();
+  });
+
+  let trashConfirm = false;
+  let trashConfirmTimer = null;
+  const trashBtn = document.createElement('button');
+  trashBtn.type = 'button';
+  trashBtn.className = 'restyld-toolbar-btn restyld-toolbar-btn--danger';
+  trashBtn.setAttribute('data-tooltip', 'Remove element');
+  trashBtn.innerHTML = TRASH_ICON;
+  trashBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedElement) return;
+    if (!trashConfirm) {
+      trashConfirm = true;
+      trashBtn.classList.add('restyld-toolbar-confirm');
+      trashBtn.setAttribute('data-tooltip-confirm', 'Click again to delete');
+      trashConfirmTimer = setTimeout(() => {
+        trashConfirm = false;
+        trashBtn.classList.remove('restyld-toolbar-confirm');
+        trashBtn.removeAttribute('data-tooltip-confirm');
+        trashConfirmTimer = null;
+      }, 2000);
+      return;
+    }
+    if (trashConfirmTimer) clearTimeout(trashConfirmTimer);
+    pushUndoSnapshot();
+    const removedHtml = selectedElement.outerHTML;
+    recordModification(selectedElement, { removed: true, removedHtml });
+    selectedElement.remove();
+    selectedElement = null;
+    removeFloatingToolbar();
+    removeResizeHandles();
+    clearSelectionBorder();
+    notifySelection();
+  });
+
+  const moreBtn = document.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className = 'restyld-toolbar-btn';
+  moreBtn.setAttribute('data-tooltip', 'More options');
+  moreBtn.innerHTML = MORE_ICON;
+  moreBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+
+  const divider = document.createElement('div');
+  divider.className = 'restyld-toolbar-divider';
+  bar.appendChild(lockBtn);
+  bar.appendChild(duplicateBtn);
+  bar.appendChild(trashBtn);
+  bar.appendChild(divider);
+  bar.appendChild(moreBtn);
+  overlay.appendChild(bar);
+  document.body.appendChild(overlay);
+  floatingToolbarRoot = overlay;
+  updateFloatingToolbarPosition();
+}
+
+function updateFloatingToolbarPosition() {
+  if (!floatingToolbarRoot || !selectedElement || !document.body.contains(selectedElement)) return;
+  const bar = floatingToolbarRoot.querySelector('.restyld-floating-toolbar');
+  if (!bar) return;
+  const rect = selectedElement.getBoundingClientRect();
+  const barRect = bar.getBoundingClientRect();
+  const viewH = document.documentElement.clientHeight || window.innerHeight;
+  const viewW = document.documentElement.clientWidth || window.innerWidth;
+  let top = rect.top - TOOLBAR_GAP - barRect.height;
+  if (top < TOOLBAR_GAP) {
+    top = rect.bottom + TOOLBAR_GAP;
+  }
+  let left = rect.left + rect.width / 2 - barRect.width / 2;
+  if (left < TOOLBAR_GAP) left = TOOLBAR_GAP;
+  if (left + barRect.width > viewW - TOOLBAR_GAP) left = viewW - barRect.width - TOOLBAR_GAP;
+  bar.style.position = 'fixed';
+  bar.style.left = `${left}px`;
+  bar.style.top = `${top}px`;
+}
+
+function removeFloatingToolbar() {
+  if (floatingToolbarRoot && floatingToolbarRoot.parentNode) {
+    floatingToolbarRoot.parentNode.removeChild(floatingToolbarRoot);
+  }
+  floatingToolbarRoot = null;
 }
 
 function notifySelection() {
@@ -520,6 +705,7 @@ function updatePanelPosition() {
 function showPanel() {
   if (!selectedElement) return;
   createResizeHandles();
+  createFloatingToolbar();
   attachDragToSelectedElement();
   notifySelection();
 }
@@ -527,6 +713,7 @@ function showPanel() {
 function hidePanel() {
   removeDragFromSelectedElement();
   removeResizeHandles();
+  removeFloatingToolbar();
   clearGuides();
   clearSelectionBorder();
   selectedElement = null;
@@ -540,6 +727,7 @@ function attachDragToSelectedElement() {
 
   const onMouseDown = (e) => {
     if (e.target !== el && !el.contains(e.target)) return;
+    if (isElementLocked(el)) return;
     e.preventDefault();
     e.stopPropagation();
     let startX = e.clientX;
