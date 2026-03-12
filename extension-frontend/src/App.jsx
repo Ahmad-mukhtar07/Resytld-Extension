@@ -170,10 +170,7 @@ function App() {
         setDesignMode(false)
         setSelectedElement(null)
       } else {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content.js'],
-        })
+        await ensureContentScript(tab.id)
         const res = await chrome.tabs.sendMessage(tab.id, { type: 'ENABLE_DESIGN_MODE' })
         setDesignMode(res?.designMode ?? true)
         if (res?.designMode) await syncSelection()
