@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getHostFromUrl,
   getSkinsForHost,
@@ -26,6 +26,8 @@ function App() {
   const [editorCssValue, setEditorCssValue] = useState('')
   const [openSkinsSection, setOpenSkinsSection] = useState(true)
   const [openEditorSection, setOpenEditorSection] = useState(true)
+  const designModeRef = useRef(designMode)
+  designModeRef.current = designMode
 
   const loadSkins = useCallback(async (url) => {
     const h = getHostFromUrl(url)
@@ -81,6 +83,27 @@ function App() {
     }
     chrome.runtime.onMessage.addListener(listener)
     return () => chrome.runtime.onMessage.removeListener(listener)
+  }, [])
+
+  // When the side panel is closed or hidden, turn off design mode in the tab
+  useEffect(() => {
+    function disableDesignModeInTab() {
+      if (!designModeRef.current) return
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'DISABLE_DESIGN_MODE' }).catch(() => {})
+        }
+      })
+    }
+    function onPanelHidden() {
+      if (document.hidden) disableDesignModeInTab()
+    }
+    document.addEventListener('visibilitychange', onPanelHidden)
+    document.addEventListener('pagehide', disableDesignModeInTab)
+    return () => {
+      document.removeEventListener('visibilitychange', onPanelHidden)
+      document.removeEventListener('pagehide', disableDesignModeInTab)
+    }
   }, [])
 
   async function sendToTab(message) {
