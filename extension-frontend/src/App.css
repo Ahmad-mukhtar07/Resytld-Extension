@@ -152,6 +152,219 @@
   margin-top: 0;
 }
 
+/* Edit card: single header row (Edit + mode + flip + collapse) */
+.collapsible-edit .editor-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  min-height: 48px;
+}
+
+.collapsible-edit .collapsible-body {
+  border-top: none;
+  padding-top: 0;
+}
+
+.collapsible-edit .editor-card-header-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.collapsible-edit .editor-card-header-main:hover {
+  opacity: 0.9;
+}
+
+.editor-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.editor-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.editor-collapse-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.editor-collapse-icon {
+  font-size: 0.7rem;
+  color: var(--text-tertiary, #9ca3af);
+}
+
+/* Element info row (tag, id, class) below header */
+.editor-element-info {
+  flex-shrink: 0;
+  padding: 10px 16px 8px;
+  font-size: 12px;
+  color: var(--text-tertiary, #6b7280);
+  line-height: 1.5;
+  word-break: break-all;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: var(--bg-base, #fafafa);
+}
+
+.editor-element-info .restyld-sb-tag {
+  font-weight: 600;
+  color: var(--accent, #2563eb);
+}
+
+.editor-element-info .restyld-sb-ids { color: #059669; }
+.editor-element-info .restyld-sb-classes { color: #7c3aed; }
+
+/* Flip card (entire card body flips) */
+.editor-flip-card {
+  min-height: 360px;
+  perspective: 1000px;
+}
+
+.editor-flip-inner {
+  position: relative;
+  width: 100%;
+  min-height: 360px;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.editor-flip-inner--flipped {
+  transform: rotateY(180deg);
+}
+
+.editor-flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 360px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated, #fff);
+  overflow: hidden;
+}
+
+.editor-flip-front {
+  transform: rotateY(0deg);
+}
+
+.editor-flip-back {
+  transform: rotateY(180deg);
+}
+
+.editor-flip-face-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-flip-mode-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary, #9ca3af);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: transparent;
+  transition: color 0.2s, background 0.2s;
+}
+
+.editor-flip-mode-badge--active {
+  color: var(--accent, #2563eb);
+  background: var(--accent-muted, rgba(37, 99, 235, 0.1));
+}
+
+.editor-flip-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-elevated, #f3f4f6);
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+
+.editor-flip-btn:hover {
+  background: var(--border, #e5e7eb);
+  color: var(--text-primary, #374151);
+}
+
+.editor-flip-btn:active {
+  transform: scale(0.95);
+}
+
+/* CSS editor back */
+.editor-css-back {
+  padding: 12px;
+  gap: 10px;
+}
+
+.editor-css-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary, #9ca3af);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.editor-css-textarea {
+  flex: 1;
+  min-height: 200px;
+  width: 100%;
+  padding: 12px;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-base, #fff);
+  color: var(--text-primary, #111827);
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.editor-css-textarea:focus {
+  outline: none;
+  border-color: var(--accent, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.editor-css-hint {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #9ca3af);
+  flex-shrink: 0;
+}
+
 .section-title {
   font-size: 0.7rem;
   font-weight: 600;

@@ -7,6 +7,7 @@ import {
   setActiveSkin,
   getActiveSkin,
 } from './lib/skinStorage.js'
+import { stylesToCss, parseCssToStyles } from './lib/styleSerialization.js'
 import Sidebar from './components/Sidebar.jsx'
 import './App.css'
 import './components/Sidebar.css'
@@ -20,6 +21,9 @@ function App() {
   const [saveName, setSaveName] = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [selectedElement, setSelectedElement] = useState(null)
+  const [currentStyles, setCurrentStyles] = useState({})
+  const [editorFlipped, setEditorFlipped] = useState(false)
+  const [editorCssValue, setEditorCssValue] = useState('')
   const [openSkinsSection, setOpenSkinsSection] = useState(true)
   const [openEditorSection, setOpenEditorSection] = useState(true)
 
@@ -44,13 +48,17 @@ function App() {
             const sel = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SELECTED_ELEMENT' })
             if (sel?.selected) {
               setSelectedElement(sel.selected)
+              setCurrentStyles(sel.selected.initialStyles ?? {})
+              setEditorFlipped(false)
               setOpenEditorSection(true)
             } else {
               setSelectedElement(null)
+              setCurrentStyles({})
             }
           } catch {
             setDesignMode(false)
             setSelectedElement(null)
+            setCurrentStyles({})
           }
         }
         setError(null)
@@ -66,6 +74,8 @@ function App() {
     const listener = (msg) => {
       if (msg?.type === 'SELECTED_ELEMENT') {
         setSelectedElement(msg.selected ?? null)
+        setCurrentStyles(msg.selected?.initialStyles ?? {})
+        setEditorFlipped(false)
         if (msg.selected) setOpenEditorSection(true)
       }
     }
@@ -84,26 +94,56 @@ function App() {
       const res = await sendToTab({ type: 'GET_SELECTED_ELEMENT' })
       if (res?.selected) {
         setSelectedElement(res.selected)
+        setCurrentStyles(res.selected.initialStyles ?? {})
       } else {
         setSelectedElement(null)
+        setCurrentStyles({})
       }
     } catch {
       setSelectedElement(null)
+      setCurrentStyles({})
     }
   }
 
   async function handleApplyStyle(styles) {
+    setCurrentStyles((prev) => ({ ...prev, ...styles }))
     await sendToTab({ type: 'APPLY_STYLE', styles })
   }
+
+  function handleFlipToCss() {
+    setEditorCssValue(stylesToCss(currentStyles))
+    setEditorFlipped(true)
+  }
+
+  function handleFlipToVisual() {
+    setEditorFlipped(false)
+  }
+
+  // Live apply CSS as user types (debounced)
+  useEffect(() => {
+    if (!editorFlipped || !selectedElement) return
+    const t = setTimeout(() => {
+      const parsed = parseCssToStyles(editorCssValue)
+      if (Object.keys(parsed).length) {
+        setCurrentStyles((prev) => ({ ...prev, ...parsed }))
+        sendToTab({ type: 'APPLY_STYLE', styles: parsed })
+      }
+    }, 280)
+    return () => clearTimeout(t)
+  }, [editorFlipped, editorCssValue, selectedElement])
 
   async function handleDeselect() {
     await sendToTab({ type: 'DESELECT' })
     setSelectedElement(null)
+    setCurrentStyles({})
+    setEditorFlipped(false)
   }
 
   async function handleRemove() {
     await sendToTab({ type: 'REMOVE_ELEMENT' })
     setSelectedElement(null)
+    setCurrentStyles({})
+    setEditorFlipped(false)
   }
 
   async function ensureContentScript(tabId) {
@@ -358,29 +398,91 @@ function App() {
           </div>
         </div>
 
-        {/* Bottom: Edit element (collapsible, only when selection exists) */}
+        {/* Edit card: one header (Edit + Visual/CSS + flip + collapse), then element info, then flip content */}
         {designMode && selectedElement && (
-          <div className={`collapsible ${openEditorSection ? 'is-open' : ''}`}>
-            <button
-              type="button"
-              className="collapsible-header"
-              onClick={() => setOpenEditorSection((o) => !o)}
-              aria-expanded={openEditorSection}
-            >
-              <span className="collapsible-title">Edit element</span>
-              <span className="collapsible-icon" aria-hidden>{openEditorSection ? '▼' : '▶'}</span>
-            </button>
+          <div className={`collapsible collapsible-edit ${openEditorSection ? 'is-open' : ''}`}>
+            <div className="editor-card-header">
+              <button
+                type="button"
+                className="editor-card-header-main"
+                onClick={() => setOpenEditorSection((o) => !o)}
+                aria-expanded={openEditorSection}
+              >
+                <span className="editor-card-title">Edit</span>
+                <span className={`editor-flip-mode-badge editor-flip-mode-badge--active`}>
+                  {editorFlipped ? 'CSS' : 'Visual'}
+                </span>
+              </button>
+              <div className="editor-card-header-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="editor-flip-btn"
+                  onClick={editorFlipped ? handleFlipToVisual : handleFlipToCss}
+                  title={editorFlipped ? 'Switch to visual controls' : 'Switch to CSS editor'}
+                  aria-label={editorFlipped ? 'Switch to visual controls' : 'Switch to CSS editor'}
+                >
+                  {editorFlipped ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/><path d="M8 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/></svg>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="editor-flip-btn editor-collapse-btn"
+                  onClick={() => setOpenEditorSection((o) => !o)}
+                  title={openEditorSection ? 'Collapse' : 'Expand'}
+                  aria-label={openEditorSection ? 'Collapse' : 'Expand'}
+                >
+                  <span className="editor-collapse-icon" aria-hidden>{openEditorSection ? '▼' : '▶'}</span>
+                </button>
+              </div>
+            </div>
             <div className="collapsible-body">
-              <section className="section editor-section">
-                <Sidebar
-                  embedded
-                  elementInfo={selectedElement.elementInfo}
-                  initialStyles={selectedElement.initialStyles}
-                  onStyleChange={handleApplyStyle}
-                  onDeselect={handleDeselect}
-                  onRemove={handleRemove}
-                />
-              </section>
+              <div className="editor-flip-card">
+                <div className={`editor-flip-inner ${editorFlipped ? 'editor-flip-inner--flipped' : ''}`}>
+                  {/* Front: element info + visual controls */}
+                  <div className="editor-flip-face editor-flip-front">
+                    <div className="editor-element-info">
+                      <span className="restyld-sb-tag">&lt;{(selectedElement.elementInfo.tagName || '').toLowerCase() || '—'}&gt;</span>
+                      {selectedElement.elementInfo.id && <span className="restyld-sb-ids"> id="{selectedElement.elementInfo.id}"</span>}
+                      {selectedElement.elementInfo.className && <span className="restyld-sb-classes"> class="{selectedElement.elementInfo.className}"</span>}
+                    </div>
+                    <section className="section editor-section editor-flip-face-content">
+                      <Sidebar
+                        embedded
+                        hideHeaderAndInfo
+                        elementInfo={selectedElement.elementInfo}
+                        initialStyles={currentStyles}
+                        onStyleChange={handleApplyStyle}
+                        onDeselect={handleDeselect}
+                        onRemove={handleRemove}
+                      />
+                    </section>
+                  </div>
+                  {/* Back: element info + CSS editor */}
+                  <div className="editor-flip-face editor-flip-back">
+                    <div className="editor-element-info">
+                      <span className="restyld-sb-tag">&lt;{(selectedElement.elementInfo.tagName || '').toLowerCase() || '—'}&gt;</span>
+                      {selectedElement.elementInfo.id && <span className="restyld-sb-ids"> id="{selectedElement.elementInfo.id}"</span>}
+                      {selectedElement.elementInfo.className && <span className="restyld-sb-classes"> class="{selectedElement.elementInfo.className}"</span>}
+                    </div>
+                    <div className="editor-flip-face-content editor-css-back">
+                      <label className="editor-css-label">Inline styles (one property per line or semicolon-separated)</label>
+                      <textarea
+                        className="editor-css-textarea"
+                        value={editorCssValue}
+                        onChange={(e) => setEditorCssValue(e.target.value)}
+                        placeholder="background-color: #fff;&#10;width: 100px;&#10;border-radius: 8px;"
+                        spellCheck={false}
+                        rows={12}
+                        title="Changes apply live as you type"
+                      />
+                      <span className="editor-css-hint">Changes apply live</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

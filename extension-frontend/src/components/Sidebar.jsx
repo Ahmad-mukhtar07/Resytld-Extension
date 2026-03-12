@@ -32,6 +32,7 @@ function parseNum(val) {
 
 export default function Sidebar({
   embedded = false,
+  hideHeaderAndInfo = false,
   elementInfo = {},
   initialStyles = {},
   onStyleChange,
@@ -120,27 +121,29 @@ export default function Sidebar({
         />
       )}
       <div className="restyld-sb-content">
-        <header className="restyld-sb-header">
-          <div className="restyld-sb-headerRow">
-            <h2 className="restyld-sb-title">Edit element</h2>
-            {!embedded && (
-              <button
-                type="button"
-                className="restyld-sb-minimizeBtn"
-                onClick={() => setMinimized(true)}
-                title="Minimize"
-                aria-label="Minimize"
-              >
-                ▶
-              </button>
-            )}
-          </div>
-          <div className="restyld-sb-elementInfo">
-            <span className="restyld-sb-tag">&lt;{tag}&gt;</span>
-            {id && <span className="restyld-sb-ids"> id="{id}"</span>}
-            {classes && <span className="restyld-sb-classes"> class="{classes}"</span>}
-          </div>
-        </header>
+        {!(embedded && hideHeaderAndInfo) && (
+          <header className="restyld-sb-header">
+            <div className="restyld-sb-headerRow">
+              <h2 className="restyld-sb-title">Edit element</h2>
+              {!embedded && (
+                <button
+                  type="button"
+                  className="restyld-sb-minimizeBtn"
+                  onClick={() => setMinimized(true)}
+                  title="Minimize"
+                  aria-label="Minimize"
+                >
+                  ▶
+                </button>
+              )}
+            </div>
+            <div className="restyld-sb-elementInfo">
+              <span className="restyld-sb-tag">&lt;{tag}&gt;</span>
+              {id && <span className="restyld-sb-ids"> id="{id}"</span>}
+              {classes && <span className="restyld-sb-classes"> class="{classes}"</span>}
+            </div>
+          </header>
+        )}
 
         <div className="restyld-sb-body">
           {/* Appearance */}
